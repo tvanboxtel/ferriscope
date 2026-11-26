@@ -145,6 +145,8 @@ fn App() -> Element {
             }
         })));
     });
+    #[cfg(feature = "desktop")]
+    let mut codex_available = use_signal(|| false);
     let open = use_callback(move |input: String| {
         if busy() {
             return;
@@ -152,6 +154,8 @@ fn App() -> Element {
         match pr_key(&input) {
             Ok(key) if cfg!(feature = "desktop") => {
                 preparing.set(None);
+                #[cfg(feature = "desktop")]
+                codex_available.set(gh::resolve("codex").is_ok());
                 pending.set(Some(key.clone()));
                 load.call((key, None));
             }
@@ -159,6 +163,10 @@ fn App() -> Element {
             Err(e) => error.set(e),
         }
     });
+    #[cfg(feature = "desktop")]
+    let guided_available = codex_available();
+    #[cfg(not(feature = "desktop"))]
+    let guided_available = false;
     rsx! {
         document::Title {"Ferriscope · PR reader"}
         style { {include_str!("style.css")} }
@@ -221,12 +229,12 @@ fn App() -> Element {
                         (ReviewMode::Flow,"Follow the data flow","Walk through a behavior with Codex."),
                         (ReviewMode::Custom,"Custom walkthrough","Guide Codex with your own question."),
                     ]{
-                        button {disabled:requested.read().is_some(),onclick:{let key=key.clone();move |_|{
+                        button {disabled:requested.read().is_some() || (choice!=ReviewMode::Raw && !guided_available),onclick:{let key=key.clone();move |_|{
                             if let Some(snapshot)=ready.take() { choose.call((snapshot,choice)); }
                             else if busy() {requested.set(Some(choice));}
                             else {load.call((key.clone(),Some(choice)));}
                         }},
-                            strong {"{title}"} span {"{description}"}
+                            strong {"{title}"} span {if choice!=ReviewMode::Raw && !guided_available {"Requires Codex CLI"}else{"{description}"}}
                         }
                     }
                 }

@@ -4,12 +4,12 @@
 
 ## TL;DR — install and open a PR
 
-**No Rust or source checkout needed.** Pick your [v0.1.4 download](https://github.com/tvanboxtel/ferriscope/releases/tag/v0.1.4):
+**No Rust or source checkout needed.** Pick your [v0.2.0 download](https://github.com/tvanboxtel/ferriscope/releases/tag/v0.2.0):
 
 | Your computer | Download | Install |
 | --- | --- | --- |
-| **Mac with Apple Silicon** (M-series) | [Ferriscope for Mac (.zip)](https://github.com/tvanboxtel/ferriscope/releases/download/v0.1.4/Ferriscope-macOS-arm64.zip) | Unzip, drag **Ferriscope.app** into **Applications**, then open it. |
-| **Linux x86-64** | [Ferriscope for Linux (.tar.gz)](https://github.com/tvanboxtel/ferriscope/releases/download/v0.1.4/ferriscope-0.1.4-linux-x86_64.tar.gz) | Check the runtime requirements below, extract, and run `sh install.sh` inside the extracted folder. Then open **Ferriscope** from the applications menu. |
+| **Mac with Apple Silicon** (M-series) | [Ferriscope for Mac (.zip)](https://github.com/tvanboxtel/ferriscope/releases/download/v0.2.0/Ferriscope-macOS-arm64.zip) | Unzip, drag **Ferriscope.app** into **Applications**, then open it. |
+| **Linux x86-64** | [Ferriscope for Linux (.tar.gz)](https://github.com/tvanboxtel/ferriscope/releases/download/v0.2.0/ferriscope-0.2.0-linux-x86_64.tar.gz) | Check the runtime requirements below, extract, and run `sh install.sh` inside the extracted folder. Then open **Ferriscope** from the applications menu. |
 
 **First launch:** Ferriscope uses your [GitHub CLI](https://cli.github.com/) login. If you haven’t signed in, run `gh auth login --hostname github.com` in a terminal. Pick a PR from **Your PRs** or paste a PR URL and click **Open / refresh**. Press **J** to start reading.
 
@@ -28,9 +28,9 @@ The archive needs compatible GTK 3 and WebKitGTK 4.1 runtime libraries. It inclu
 Run from any directory:
 
 ```sh
-curl -fLO https://github.com/tvanboxtel/ferriscope/releases/download/v0.1.4/ferriscope-0.1.4-linux-x86_64.tar.gz &&
-tar -xzf ferriscope-0.1.4-linux-x86_64.tar.gz &&
-sh ferriscope-0.1.4-linux-x86_64/install.sh
+curl -fLO https://github.com/tvanboxtel/ferriscope/releases/download/v0.2.0/ferriscope-0.2.0-linux-x86_64.tar.gz &&
+tar -xzf ferriscope-0.2.0-linux-x86_64.tar.gz &&
+sh ferriscope-0.2.0-linux-x86_64/install.sh
 ```
 
 The installer registers the launcher and icon and places the executable at `~/.local/bin/ferriscope` without `sudo`. To update, close the app and install a compatible [release](https://github.com/tvanboxtel/ferriscope/releases/latest) the same way; saved reviews stay on disk. [Uninstall instructions](packaging/linux/INSTALL.txt).
@@ -39,9 +39,9 @@ The installer registers the launcher and icon and places the executable at `~/.l
 
 ## Your first review
 
-**Guided review (desktop, development build):** Select a PR from the inbox or recents, or paste its URL. Before the reader opens, choose **Raw review**, **Follow the data flow**, or **Custom walkthrough**. Guided views ask for confirmation via **Generate** before launching Codex. Ferriscope stages the changed-file manifest and available GitHub patches in a temporary folder for Codex to read on demand; no checkout is needed. **Prompt sent to Codex** shows the instructions, not an inline copy of the patches. For questions that need unchanged code, enable **Include local repo context** and choose a trusted, clean checkout whose `origin` and `HEAD` match the PR. A remembered folder is used only when you opt in.
+**Guided review (desktop):** Select a PR from the inbox or recents, or paste its URL. Before the reader opens, choose **Raw review**, **Follow the data flow**, or **Custom walkthrough**. Guided views ask for confirmation via **Generate** before launching Codex. Ferriscope stages the changed-file manifest and available GitHub patches in a temporary folder for Codex to read on demand; no checkout is needed. **Prompt sent to Codex** shows the instructions, not an inline copy of the patches. For questions that need unchanged code, enable **Include local repo context** and choose a trusted, clean checkout whose `origin` and `HEAD` match the PR. A remembered folder is used only when you opt in.
 
-Generation requires your installed `codex` CLI and its existing login. It sends repository context to your configured provider and may use your account’s quota. Ferriscope requests a read-only shell; your local Codex integrations may start and have permissions beyond that shell. Raw review does not invoke Codex. The **Walkthrough** file group lists stops in order. Use the reader’s **Previous / Next** buttons or **K / J** to follow them. Select a file outside the group to resume normal file navigation without changing review marks or drafts. Routes are in-memory and discarded when you refresh or reopen a PR.
+Raw review needs no Codex installation. If the picker shows **Requires Codex CLI**, install `codex`, sign in, and reopen the mode picker to enable guided review. It sends repository context to your configured provider and may use your account’s quota. Ferriscope requests a read-only shell; your local Codex integrations may start and have permissions beyond that shell. Raw review does not invoke Codex. The **Walkthrough** file group lists stops in order. Use the reader’s **Previous / Next** buttons or **K / J** to follow them. Select a file outside the group to resume normal file navigation without changing review marks or drafts. Routes are in-memory and discarded when you refresh or reopen a PR.
 
 - **See what’s waiting:** The desktop **Your PRs** inbox shows open pull requests that directly request your review, followed by other open PRs assigned to you. A PR can have both labels. Click **Home** in the reader to see the inbox, then **Back to reader** to pick up where you left off.
 - **Find a file:** press `/` to search every changed path, including collapsed groups. **Enter** opens the first match; **Esc** returns to the tree.

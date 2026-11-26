@@ -1,0 +1,8 @@
+[
+  {"filename":"Cargo.lock","status":"modified","sha":"a","patch":"@@ -1 +1 @@\n-old\n+new"},
+  {"filename":"src/accounts.rs","status":"added","sha":"b","patch":"@@ -0,0 +1 @@\n+fn delete_account() {}"},
+  {"filename":"tests/accounts.rs","status":"added","sha":"c","patch":"@@ -0,0 +1 @@\n+#[test] fn deletes_account() {}"},
+  {"filename":"migrations/drop.sql","status":"added","sha":"d","patch":"@@ -0,0 +1 @@\n+DROP TABLE legacy;"},
+  {"filename":"docs/accounts.md","status":"added","sha":"e","patch":"@@ -0,0 +1 @@\n+# Account deletion"},
+  {"filename":"images/icon.png","status":"modified","sha":"f"}
+]

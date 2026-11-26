@@ -91,6 +91,8 @@ Open [localhost:8080](http://127.0.0.1:8080), then paste a **public** PR URL ins
 
 ## At the keyboard
 
+**Recent PRs** beside the URL field reopens any of the last ten pull requests you successfully opened on this device (in the browser, this profile and origin). Clearing history removes these shortcuts, not saved reviews.
+
 | Key | Action |
 | --- | --- |
 | `/` | Search all changed file paths, including collapsed groups |

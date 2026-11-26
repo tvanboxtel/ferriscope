@@ -24,13 +24,19 @@ Try `https://github.com/octocat/Hello-World/pull/1` for a small live diff. Both 
 
 ## How review state works
 
-Classification uses the first case-insensitive path match: generated directories and lockfiles, test directories or filename conventions, documentation, infrastructure (including migrations), known source extensions, then Other. The complete rules are in `src/lib.rs`. Generated/lockfiles starts collapsed; expand its count to see and read the individual files.
+In the reader, press **J** for the next file or **K** for the previous file, or use the buttons above the diff. Navigation follows your group and file order and opens the destination group. Shortcuts do not intercept text typed into the URL or group name fields. Diffs highlight recognized source extensions locally; other files retain plain unified-diff coloring.
+
+Classification uses the first case-insensitive path match: generated directories and lockfiles, test directories or filename conventions, documentation, infrastructure (including migrations), known source extensions, then Other. The complete rules are in `src/lib.rs`. Every group starts collapsed, including saved custom groups. Expand a group to see its files, then choose a file to open its diff.
 
 Each PR has its own ordered groups, paths and reviewed fingerprints. The browser stores only this small JSON record in localStorage for the current origin. Desktop atomically replaces a JSON file in the OS local data directory under `ferriscope/`. Neither stores tokens or patch contents. Use the same browser profile and origin to resume.
 
 A reviewed fingerprint covers the patch, change type and rename source, falling back to the blob SHA when no patch is supplied. It does not include the PR head SHA. New paths enter their default groups; disappeared paths leave the list. A path renamed between refreshes is treated as new.
 
 ## Tests
+
+Default file groups show collapsible directory sections; custom groups keep their manual sequence. With the reader focused, **Space** toggles the active file’s local reviewed status. Space on a focused button or checkbox still activates that control.
+
+**Desktop inline reviews:** select the numbered `+` beside a patch line, write a note, and choose **Save draft**. Saved comments survive reopening the PR. **Submit … inline comments to GitHub** publishes the batch as one comment-only review via your `gh` login (not an approval). If the PR head changes, copy the old notes and re-anchor them before submitting. The browser remains read-only on GitHub.
 
 ```sh
 cargo test --locked --features desktop

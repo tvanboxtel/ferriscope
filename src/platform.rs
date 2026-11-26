@@ -39,7 +39,7 @@ struct Meta {
     base: Ref,
     changed_files: usize,
 }
-pub async fn fetch(key: &str) -> Result<Vec<File>, String> {
+pub async fn fetch(key: &str) -> Result<(String, Vec<File>), String> {
     let api = format!("repos/{}", key.replace("/pull/", "/pulls/"));
     let parse = |s: &str| serde_json::from_str::<Meta>(s).map_err(|e| e.to_string());
     let meta = parse(&request(&api).await?)?;
@@ -54,7 +54,7 @@ pub async fn fetch(key: &str) -> Result<Vec<File>, String> {
     if files.len() != meta.changed_files || parse(&request(&api).await?)? != meta {
         return Err("The PR changed while loading. Try refreshing.".into());
     }
-    Ok(files)
+    Ok((meta.head.sha, files))
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -76,7 +76,7 @@ mod store {
     }
 }
 #[cfg(not(target_arch = "wasm32"))]
-mod store {
+pub(crate) mod store {
     use std::{fs, io::Write, path::PathBuf};
     fn path(k: &str) -> Result<PathBuf, String> {
         Ok(dirs::data_local_dir()
@@ -107,6 +107,16 @@ pub fn load(key: &str) -> Result<Review, String> {
         .transpose()
         .map_err(|e| e.to_string())?
         .unwrap_or_default())
+}
+pub fn load_theme() -> String {
+    store::read("appearance")
+        .ok()
+        .flatten()
+        .filter(|s| matches!(s.as_str(), "light" | "dark" | "dusk"))
+        .unwrap_or_else(|| "light".into())
+}
+pub fn save_theme(theme: &str) -> Result<(), String> {
+    store::write("appearance", theme)
 }
 pub fn save(key: &str, state: &Review) -> Result<(), String> {
     store::write(

@@ -91,6 +91,14 @@ aside section { border-bottom: 1px solid var(--line); }
 .folder ~ .row { padding-left:.65rem; }
 .line-comment { font:inherit; font-size:.72rem; color:var(--muted); margin-right:.7rem; padding:.08rem .35rem; min-width:4em; text-align:right; }
 .drafts { border:1px solid var(--line); padding:1rem; border-radius:.7rem; }
+.review-actions,.review-confirm { display:flex; align-items:center; flex-wrap:wrap; gap:.5rem; }
+.review-actions { padding:.55rem 0 1rem; }
+.review-actions small { margin-right:.25rem; }
+.review-actions button[aria-pressed=true] { border-color:var(--teal); background:var(--selected); }
+.review-actions .count { margin-left:.4rem; }
+.drafts { margin-bottom:1rem; }
+.drafts summary { color:var(--teal); cursor:pointer; }
+.publish-review:not(:disabled) { background:var(--teal); color:var(--panel); }
 .draft-note { border-bottom:1px solid var(--line); padding:.5rem 0; }
 .draft-note p { white-space:pre-wrap; overflow-wrap:anywhere; }
 .drafts label,.drafts textarea { display:block; margin:.6rem 0; }

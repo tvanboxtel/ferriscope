@@ -4,12 +4,12 @@ Extract the archive and run `sh install.sh` from the extracted directory.
 No Rust, Cargo, Dioxus CLI, or sudo is required. Open Ferriscope from your
 application menu, or run ~/.local/bin/ferriscope.
 
-You need a compatible Linux distribution and CPU architecture, the GTK 3
-and WebKitGTK 4.1 runtime libraries, and the libxdo shared library from
-xdotool (packaged separately on some distributions). The installer uses
-`ldd ./ferriscope` to check the exact library versions this build needs
-before copying files. If your distribution does not provide those versions,
-use a build targeting your distribution or build Ferriscope from source.
+You need a compatible Linux distribution and CPU architecture, with the
+GTK 3 and WebKitGTK 4.1 runtime libraries and their dependencies. This
+archive includes libxdo; you don't need to install xdotool. The installer
+uses `ldd ./ferriscope` to check the runtime libraries before copying files.
+If your distribution does not provide the required libraries, use a build
+targeting your distribution or build Ferriscope from source.
 
 You also need GitHub CLI on PATH. Run `gh auth login --hostname github.com`
 if you haven't signed in.

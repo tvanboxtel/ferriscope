@@ -23,7 +23,7 @@ This build is ad-hoc signed, **not Apple notarized**. Gatekeeper may block it. I
 <details>
 <summary>Linux: copy-paste install, requirements, and updates</summary>
 
-The archive needs compatible GTK 3, WebKitGTK 4.1, and libxdo runtime libraries. **On current Arch Linux**, `xdotool` provides `libxdo.so.4`, but the v0.1.3 download requires `libxdo.so.3`. [Build from source](#other-ways-to-run-ferriscope) to link against the version installed on your system.
+The archive needs compatible GTK 3 and WebKitGTK 4.1 runtime libraries. It includes libxdo, so you don't need to install `xdotool`. If you downloaded v0.1.3 before this fix and see a `libxdo.so.3` error, download it again.
 
 Run from any directory:
 
@@ -58,7 +58,9 @@ rustup toolchain install 1.100.0
 cargo +1.100.0 install --git https://github.com/tvanboxtel/ferriscope.git --branch main --locked --features desktop ferriscope
 ```
 
-Run `ferriscope` with Cargo’s bin directory on your `PATH`. This installs a terminal executable, not a graphical launcher. For development in a checkout, use `cargo run --locked --features desktop`. To build a shareable Linux archive, run `sh packaging/linux/package.sh`.
+Run `ferriscope` with Cargo’s bin directory on your `PATH`. This installs a terminal executable, not a graphical launcher. For development in a checkout, use `cargo run --locked --features desktop`.
+
+To build the shareable Linux archive, run `sh packaging/linux/package.sh`. Use Debian 12 for the release build to avoid requiring a newer glibc. Install `curl`, `make`, `pkg-config`, `libgtk-3-dev`, `libwebkit2gtk-4.1-dev`, `libssl-dev`, `libx11-dev`, `libxtst-dev`, `libxinerama-dev`, and `libxkbcommon-dev`. The packaging script builds libxdo itself rather than using the system copy.
 
 </details>
 

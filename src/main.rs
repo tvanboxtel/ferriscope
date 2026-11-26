@@ -1,6 +1,7 @@
 mod comments;
 mod diff;
 mod platform;
+mod updates;
 #[cfg(not(target_arch = "wasm32"))]
 mod preview;
 use dioxus::prelude::*;
@@ -123,6 +124,7 @@ fn Appearance(mut theme: Signal<String>, mut error: Signal<String>) -> Element {
                             "{label}"
                         }
                     }
+                    updates::UpdateCheck {}
                 }
             }
     }

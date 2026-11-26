@@ -93,6 +93,8 @@ Open [localhost:8080](http://127.0.0.1:8080), then paste a **public** PR URL ins
 
 **Recent PRs** beside the URL field reopens any of the last ten pull requests you successfully opened on this device (in the browser, this profile and origin). Clearing history removes these shortcuts, not saved reviews.
 
+Open the **Ferriscope ▾** menu to change the color theme. On desktop, **Check for updates** compares the installed version with the latest GitHub release and offers a download link. It doesn’t install anything or check for unreleased commits.
+
 | Key | Action |
 | --- | --- |
 | `/` | Search all changed file paths, including collapsed groups |

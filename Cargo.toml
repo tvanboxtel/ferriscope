@@ -23,6 +23,7 @@ web-sys = { version = "0.3", features = ["Window", "Storage"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 dirs = "6"
+semver = "1"
 tempfile = "3"
 async-process = "2"
 futures-lite = "2"

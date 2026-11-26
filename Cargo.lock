@@ -1808,6 +1808,7 @@ dependencies = [
  "futures-util",
  "gloo-net",
  "pulldown-cmark",
+ "semver",
  "serde",
  "serde_json",
  "sha2",

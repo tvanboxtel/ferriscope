@@ -63,9 +63,9 @@ fn locate(plan: Plan, pr: &str, head: &str, files: &[File]) -> Result<Vec<Locate
         .collect()
 }
 
-fn prompt(pr: &str, head: &str, goal: &str, local: bool) -> String {
-    let context = if local {
-        "The working directory is the verified checkout. Read unchanged callers and helpers there when they clarify the change."
+fn prompt(pr: &str, head: &str, goal: &str, full_source: bool) -> String {
+    let context = if full_source {
+        "FERRISCOPE_PR_SOURCE points to the downloaded source snapshot at this exact commit. Read unchanged callers and helpers there when they clarify the change."
     } else {
         "The working directory is the PR bundle, not a checkout. Inspect its files freely. Do not search unrelated directories or fetch more source."
     };
@@ -91,65 +91,6 @@ fn write_bundle(dir: &Path, files: &[File]) -> std::io::Result<()> {
         );
     }
     serde_json::to_writer_pretty(std::fs::File::create(dir.join("manifest.json"))?, &manifest)?;
-    Ok(())
-}
-
-async fn git(dir: &Path, args: &[&str]) -> Result<String, String> {
-    let out = Command::new("git")
-        .current_dir(dir)
-        .args(["--no-optional-locks", "-c", "core.fsmonitor=false"])
-        .args(args)
-        .env_remove("GIT_DIR")
-        .env_remove("GIT_WORK_TREE")
-        .env_remove("GIT_INDEX_FILE")
-        .kill_on_drop(true)
-        .output()
-        .await
-        .map_err(|e| format!("Cannot inspect checkout: {e}"))?;
-    if !out.status.success() {
-        return Err("Could not verify the selected Git checkout and its origin.".into());
-    }
-    String::from_utf8(out.stdout)
-        .map(|s| s.trim_end().to_owned())
-        .map_err(|_| "Unreadable Git metadata.".into())
-}
-
-async fn verify(dir: &Path, repo: &str, head: &str) -> Result<(), String> {
-    let root = git(dir, &["rev-parse", "--show-toplevel"]).await?;
-    if Path::new(&root).canonicalize().ok() != Some(dir.to_owned()) {
-        return Err("Select the checkout root folder.".into());
-    }
-    let remote = git(dir, &["remote", "get-url", "origin"]).await?;
-    let slug = [
-        "https://github.com/",
-        "git@github.com:",
-        "ssh://git@github.com/",
-    ]
-    .iter()
-    .find_map(|p| remote.strip_prefix(p))
-    .unwrap_or("")
-    .trim_end_matches('/')
-    .trim_end_matches(".git");
-    if !slug.eq_ignore_ascii_case(repo) {
-        return Err(format!("Expected origin to point to github.com/{repo}."));
-    }
-    if git(dir, &["rev-parse", "HEAD"]).await? != head {
-        return Err("Checkout HEAD does not match the open PR. Select a matching checkout.".into());
-    }
-    if !git(
-        dir,
-        &[
-            "status",
-            "--porcelain=v1",
-            "--untracked-files=all",
-            "--ignore-submodules=none",
-        ],
-    )
-    .await?
-    .is_empty()
-    {
-        return Err("Checkout has local changes. Select a clean checkout.".into());
-    }
     Ok(())
 }
 
@@ -205,11 +146,11 @@ async fn run(
     let mut cmd = Command::new(exe);
     cmd.env("FERRISCOPE_PR_BUNDLE", &bundle)
         .args(["-a", "never", "exec"]);
+    cmd.current_dir(&bundle)
+        .arg("--skip-git-repo-check")
+        .env_remove("FERRISCOPE_PR_SOURCE");
     if let Some(dir) = dir {
-        cmd.current_dir(dir);
-    } else {
-        // Do not inherit Ferriscope's working directory or use a remembered checkout.
-        cmd.current_dir(&bundle).arg("--skip-git-repo-check");
+        cmd.env("FERRISCOPE_PR_SOURCE", dir);
     }
     let mut child = cmd
         .args([
@@ -272,14 +213,7 @@ pub fn Prepare(
     custom: bool,
 ) -> Element {
     let repo = pr.split_once("/pull/").unwrap().0.to_owned();
-    let key = format!("guided-checkout:{repo}");
-    let mut folder = use_signal(|| {
-        platform::store::read(&key)
-            .ok()
-            .flatten()
-            .unwrap_or_default()
-    });
-    let mut local = use_signal(|| false);
+    let mut full_source = use_signal(|| false);
     let mut question = use_signal(String::new);
     let mut job = use_signal(|| None::<Task>);
     let mut error = use_signal(String::new);
@@ -287,53 +221,46 @@ pub fn Prepare(
     let mut phase = use_signal(|| 0usize);
     let mut commands = use_signal(|| 0usize);
     let goal = if !custom { FLOW.to_owned() } else { question() };
-    let text = prompt(&pr, &head, &goal, local());
+    let text = prompt(&pr, &head, &goal, full_source());
     let revision_label = head.clone();
-    let can_generate = !busy && !goal.trim().is_empty() && (!local() || !folder.read().is_empty());
+    let can_generate = !busy && !goal.trim().is_empty();
     rsx! { section {class:"guided",aria_label:"Prepare guided review",
             small {"GUIDED REVIEW · CODEX"}
             h1 {if custom {"Custom walkthrough"}else{"Follow the data flow"}}
             p {class:"guided-meta","{pr} · {files.len()} changed files · " abbr {title:"{revision_label}","{revision_label.chars().take(8).collect::<String>()}"}}
             if busy {
                 ol {class:"guided-stages", aria_label:"Generation progress",
-                    for (i,name) in ["Verify PR revision","Build walkthrough with Codex","Validate stops against the diff"].into_iter().enumerate() {
-                        li {class:if i==phase() {"active"}else{""}, span {aria_hidden:"true",if i<phase() {"✓"}else{"{i+1}"}} "{name}"}
+                    for (i,name) in ["Verify PR revision","Fetch full PR source","Build walkthrough with Codex","Validate stops against the diff"].into_iter().enumerate().filter(|(i,_)|*i!=1 || full_source()) {
+                        li {class:if i==phase() {"active"}else{""}, span {aria_hidden:"true",if i<phase() {"✓"}else if !full_source() && i>1 {"{i}"}else{"{i+1}"}} "{name}"}
                     }
                 }
                 p {role:"status",match phase() {
                     0=>rsx!{"Checking the selected source…"},
-                    1=>rsx!{"Codex is working…" if commands()>0 {" · {commands} commands completed"}},
+                    1=>rsx!{"Downloading and unpacking the source snapshot…"},
+                    2=>rsx!{"Codex is working…" if commands()>0 {" · {commands} commands completed"}},
                     _=>rsx!{"Checking the revision and matching line numbers…"}
                 }}
                 progress {aria_label:"Generation in progress"}
             } else {
             if custom {label {class:"guided-question","What would you like to understand?" textarea {rows:3,maxlength:4000,placeholder:"Trace the fallback behavior and show which tests cover it.",value:"{question}",oninput:move|e|question.set(e.value())}}}
             else {p {"Trace the PR from entry points through decisions, outcomes, and tests."}}
-            label {input {r#type:"checkbox",checked:local(),onchange:move |_|local.toggle()} " Include local repo context"}
-            if local() {button {disabled:busy,onclick:move |_|{let k=key.clone();async move {
-                if let Some(dir)=rfd::AsyncFileDialog::new().set_title("Choose a checkout you trust for Codex").pick_folder().await {
-                    match dir.path().canonicalize().ok().and_then(|p|p.to_str().map(str::to_owned)) {
-                        Some(p)=>match platform::store::write(&k,&p){Ok(())=>folder.set(p),Err(e)=>error.set(e)},
-                        None=>error.set("Could not resolve checkout path.".into())
-                    }
-                }
-            }},"Choose trusted checkout"} p {"Checkout: {folder}"}}
+            div {label {input {r#type:"checkbox",checked:full_source(),aria_describedby:"source-hint",onchange:move |_|full_source.toggle()} " Include full PR source"}
+                p {id:"source-hint",class:"guided-notice","Lets Codex read unchanged files too. Ferriscope downloads and unpacks a temporary copy of the repository at this PR’s commit, so generation can take longer, especially for large repos. No local checkout needed."}
+            }
             details {summary {"Preview prompt"} pre {"{text}"}}
             p {class:"guided-notice","Uses your local Codex login and sends PR context to your provider. The shell is read-only; configured integrations may have broader permissions."}
             button {class:"generate",disabled:!can_generate,onclick:move |_|{
                 if job.peek().is_some(){return}
-                let (repo,pr,head,files,path,text)=(repo.clone(),pr.clone(),head.clone(),files.clone(),local().then(||folder()),text.clone());
+                let (repo,pr,head,files,include_source,text)=(repo.clone(),pr.clone(),head.clone(),files.clone(),full_source(),text.clone());
                 error.set(String::new());
                 phase.set(0); commands.set(0);
                 job.set(Some(spawn(async move {
                     let result=async {
-                        let dir=path.as_deref().map(Path::new);
-                        if let Some(dir)=dir {verify(dir,&repo,&head).await?;}
                         platform::verify_head(&pr,&head).await?;
-                        phase.set(1);
-                        let plan=run(&gh::resolve("codex")?,dir,&text,&files,move |n|commands.set(n)).await?;
+                        let source=if include_source { phase.set(1); Some(crate::pr_source::download(&repo,&head).await?) } else { None };
                         phase.set(2);
-                        if let Some(dir)=dir {verify(dir,&repo,&head).await?;}
+                        let plan=run(&gh::resolve("codex")?,source.as_ref().map(|s|s.path()),&text,&files,move |n|commands.set(n)).await?;
+                        phase.set(3);
                         platform::verify_head(&pr,&head).await?;
                         locate(plan,&pr,&head,&files)
                     }.await;

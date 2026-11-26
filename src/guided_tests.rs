@@ -2,40 +2,6 @@ use super::*;
 use std::{fs, os::unix::fs::PermissionsExt};
 
 const PR: &str = "demo/service/pull/1";
-const REPO: &str = "demo/service";
-fn fixture() -> (tempfile::TempDir, String) {
-    let dir = tempfile::tempdir().unwrap();
-    let git = |args: &[&str]| {
-        let out = std::process::Command::new("git")
-            .current_dir(dir.path())
-            .args([
-                "-c",
-                "user.email=fixture@example.invalid",
-                "-c",
-                "user.name=fixture",
-                "-c",
-                "commit.gpgsign=false",
-                "-c",
-                "core.hooksPath=/dev/null",
-            ])
-            .args(args)
-            .output()
-            .unwrap();
-        assert!(out.status.success(), "{:?}", out.stderr);
-        String::from_utf8(out.stdout).unwrap().trim().to_owned()
-    };
-    git(&["init", "-q"]);
-    git(&["remote", "add", "origin", "git@github.com:demo/service.git"]);
-    fs::write(
-        dir.path().join("service.ts"),
-        "export const fallback = true;",
-    )
-    .unwrap();
-    git(&["add", "service.ts"]);
-    git(&["commit", "-qm", "fixture"]);
-    let head = git(&["rev-parse", "HEAD"]);
-    (dir, head)
-}
 fn executable(dir: &Path, script: &str) -> std::path::PathBuf {
     let exe = dir.join("fake-codex");
     fs::write(&exe, format!("#!/bin/sh\nset -eu\n{script}")).unwrap();
@@ -44,7 +10,9 @@ fn executable(dir: &Path, script: &str) -> std::path::PathBuf {
 }
 #[test]
 fn generates_and_validates_without_ever_running_real_codex() {
-    let (dir, head) = fixture();
+    let dir = tempfile::tempdir().unwrap();
+    let head = "fixture-revision".to_owned();
+    fs::write(dir.path().join("unchanged.ts"), "export const tax = 20;").unwrap();
     let root = dir.path().canonicalize().unwrap();
     let tools = tempfile::tempdir().unwrap();
     let exe = executable(
@@ -54,7 +22,9 @@ case " $* " in *" --sandbox read-only "*) ;; *) exit 11;; esac
 while [ "$1" != --output-last-message ]; do shift; done
 output=$2
 grep -F 'Explain the fallback behavior' >/dev/null
-head=$(git rev-parse HEAD)
+test "$PWD" = "$FERRISCOPE_PR_BUNDLE"
+grep -F tax "$FERRISCOPE_PR_SOURCE/unchanged.ts" >/dev/null
+head=fixture-revision
 cat > "$output" <<EOF
 {"pr":"demo/service/pull/1","head":"$head","stops":[
 {"path":"service.ts","side":"RIGHT","line":10,"why":"Follow entry."},
@@ -68,9 +38,6 @@ EOF"#,
         {"filename":"test.ts","sha":"2","status":"added","patch":"@@ -0,0 +2 @@\n+assert()"}
     ])).unwrap();
     futures_lite::future::block_on(async {
-        verify(&root, REPO, &head).await.unwrap();
-        assert!(verify(&root, "other/repo", &head).await.is_err());
-        assert!(verify(&root, REPO, "different").await.is_err());
         let text = prompt(PR, &head, "Explain the fallback behavior", true);
         let plan = run(exe.as_os_str(), Some(&root), &text, &files, |_| {})
             .await
@@ -89,8 +56,6 @@ EOF"#,
             .await
             .unwrap();
         assert!(locate(plan, PR, "changed", &files).is_err());
-        fs::write(root.join("untracked"), "dirty").unwrap();
-        assert!(verify(&root, REPO, &head).await.is_err());
         let fail = executable(tools.path(), "exit 17");
         assert!(
             run(fail.as_os_str(), Some(&root), &text, &files, |_| {})
@@ -150,7 +115,10 @@ echo '{"pr":"demo/service/pull/1","head":"rev","stops":[{"path":"service.ts","si
 fn cancelling_generation_drops_the_cli_process() {
     use std::time::Duration;
     let tmp = tempfile::tempdir().unwrap();
-    let exe = executable(tmp.path(), "echo $$ > pid; exec sleep 60");
+    let exe = executable(
+        tmp.path(),
+        r#"echo $$ > "$FERRISCOPE_PR_SOURCE/pid"; exec sleep 60"#,
+    );
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_time()
         .build()

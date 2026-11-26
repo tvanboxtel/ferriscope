@@ -7,6 +7,8 @@ mod guided;
 #[cfg(feature = "desktop")]
 mod inbox;
 mod platform;
+#[cfg(feature = "desktop")]
+mod pr_source;
 #[cfg(not(target_arch = "wasm32"))]
 mod preview;
 mod updates;

@@ -4,6 +4,7 @@ mod platform;
 use dioxus::prelude::*;
 use ferriscope::{File, Review, hash, kind, pr_key};
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 
 fn main() {
     dioxus::launch(App)
@@ -15,7 +16,7 @@ fn App() -> Element {
     let mut url = use_signal(String::new);
     let mut busy = use_signal(|| false);
     let mut error = use_signal(String::new);
-    let mut session = use_signal(|| None::<(String, String, Vec<File>, Review)>);
+    let mut session = use_signal(|| None::<(String, String, Rc<Vec<File>>, Review)>);
     let mut revision = use_signal(|| 0usize);
     let open = move |event: FormEvent| {
         event.prevent_default();
@@ -37,7 +38,7 @@ fn App() -> Element {
                 let mut review = platform::load(&key)?;
                 review.reconcile(&files);
                 platform::save(&key, &review)?;
-                Ok::<_, String>((key, head, files, review))
+                Ok::<_, String>((key, head, Rc::new(files), review))
             }
             .await;
             match result {
@@ -59,26 +60,33 @@ fn App() -> Element {
                 input {aria_label:"GitHub PR URL",placeholder:"https://github.com/owner/repo/pull/123",value:"{url}",oninput:move|e|url.set(e.value())}
                 button {disabled:busy(), if busy() {"Loading…"} else {"Open / refresh"}}
             }
-            select {aria_label:"Color theme", onchange:move |e| {
-                let choice=e.value();
-                if let Err(msg)=platform::save_theme(&choice){error.set(msg)}
-                theme.set(choice);
-            },
-                for (id,label) in [("light","Light"),("dark","Dark"),("dusk","Dusk")] {
-                    option {value:id, selected:theme.read().as_str()==id,"{label}"}
-                }
-            }
         }
         if !error.read().is_empty(){p {role:"alert","{error}"}}
         if let Some((pr,head,files,review))=session.read().as_ref(){
             Reader {key:"{revision}",pr:pr.clone(),head:head.clone(), files:files.clone(),initial:review.clone(),dark:theme.read().as_str()!="light"}
         }else{section {class:"intro",small {"PERSONAL REVIEW WORKSPACE"} h1 {"Read changes by purpose."} p {"Paste a pull request above to explore its files, bring related changes together, and keep track of what you’ve reviewed."}}}
+        footer {class:"preferences",
+            details {
+                summary {"Appearance"}
+                fieldset {legend {"Color theme"}
+                    for (id,label) in [("light","Light"),("dark","Dark"),("dusk","Dusk")] {
+                        label {
+                            input {r#type:"radio",name:"theme",checked:theme.read().as_str()==id,onchange:move |_|{
+                                if let Err(msg)=platform::save_theme(id){error.set(msg)}
+                                theme.set(id.into());
+                            }}
+                            "{label}"
+                        }
+                    }
+                }
+            }
+        }
         }
     }
 }
 
 #[component]
-fn Reader(pr: String, head: String, files: Vec<File>, initial: Review, dark: bool) -> Element {
+fn Reader(pr: String, head: String, files: Rc<Vec<File>>, initial: Review, dark: bool) -> Element {
     let mut state = use_signal(|| initial.clone());
     let index = use_hook(|| {
         files
@@ -89,6 +97,20 @@ fn Reader(pr: String, head: String, files: Vec<File>, initial: Review, dark: boo
     });
     let mut active = use_signal(|| None::<usize>);
     let mut folders = use_signal(HashSet::<(String, String)>::new);
+    // An expanded kind can contain thousands of files. Keep its full logical
+    // order for keyboard navigation, but mount the sidebar in small batches.
+    const FILE_BATCH: usize = 60;
+    let mut visible = use_signal(HashMap::<String, usize>::new);
+    let mut query = use_signal(String::new);
+    let mut search_limit = use_signal(|| FILE_BATCH);
+    let paths = use_hook(|| {
+        Rc::new(
+            files
+                .iter()
+                .map(|f| f.filename.to_lowercase())
+                .collect::<Vec<_>>(),
+        )
+    });
     let mut anchor = use_signal(|| None::<comments::Anchor>);
     use_effect(move || {
         let _ = active();
@@ -112,11 +134,11 @@ fn Reader(pr: String, head: String, files: Vec<File>, initial: Review, dark: boo
     );
     let groups = state.read().groups.clone();
     let toggle = use_callback({
-        let current = active().map(|i| files[i].clone());
+        let snapshot = Rc::clone(&files);
         move |()| {
-            if let Some(f) = &current {
+            if let Some(i) = active() {
                 let mut s = state();
-                s.toggle(f);
+                s.toggle(&snapshot[i]);
                 save.call(s);
             }
         }
@@ -133,6 +155,17 @@ fn Reader(pr: String, head: String, files: Vec<File>, initial: Review, dark: boo
                 .filter_map(move |(fi, p)| index.get(p).map(|&i| (g, fi, i)))
         })
         .collect();
+    let needle = query.read().trim().to_lowercase();
+    let matches: Vec<_> = if needle.is_empty() {
+        Vec::new()
+    } else {
+        ordered
+            .iter()
+            .enumerate()
+            .filter_map(|(p, &(_, _, i))| paths[i].contains(&needle).then_some((p, i)))
+            .collect()
+    };
+    let first = matches.first().map(|&(p, _)| p);
     let pos = ordered.iter().position(|&(_, _, i)| Some(i) == active());
     let previous = pos.and_then(|p| p.checked_sub(1));
     let next = Some(pos.map_or(0, |p| p + 1)).filter(|&p| p < ordered.len());
@@ -141,6 +174,17 @@ fn Reader(pr: String, head: String, files: Vec<File>, initial: Review, dark: boo
         let review = state.read();
         let group = &review.groups[g];
         expanded.write().insert(group.name.clone());
+        if fi
+            >= visible
+                .read()
+                .get(&group.name)
+                .copied()
+                .unwrap_or(FILE_BATCH)
+        {
+            visible
+                .write()
+                .insert(group.name.clone(), (fi / FILE_BATCH + 1) * FILE_BATCH);
+        }
         let path = &group.files[fi];
         folders
             .write()
@@ -148,17 +192,41 @@ fn Reader(pr: String, head: String, files: Vec<File>, initial: Review, dark: boo
         active.set(Some(i));
         focus_reader();
     });
+    let choose = use_callback(move |p: usize| {
+        query.set(String::new());
+        jump.call(p)
+    });
     rsx! {
         main { tabindex:"-1",
             onmounted:move |e|async move{let _=e.set_focus(true).await;},
             onkeydown:move |e:KeyboardEvent|{
                 if !e.modifiers().is_empty(){return}
+                if e.key()==Key::Character("/".into()){e.prevent_default();document::eval("document.getElementById('file-search')?.focus()");return}
                 if e.key()==Key::Character(" ".into()) && active().is_some(){e.prevent_default();if !e.is_auto_repeating(){toggle.call(())}return}
                 let dest=match e.key(){Key::Character(k) if k=="j"=>next,Key::Character(k) if k=="k"=>previous,_=>return};
                 if let Some(p)=dest{e.prevent_default();jump.call(p)}
             },
             aside {onkeydown:keep_native_space,
                 small {"PULL REQUEST"} h3 {"{pr}"} p {"{files.len()} changed files"}
+                input {id:"file-search",r#type:"search",aria_label:"Search files",placeholder:"Search files by path  /",value:"{query}",
+                    oninput:move |e|{query.set(e.value());search_limit.set(FILE_BATCH)},
+                    onkeydown:move |e:KeyboardEvent|{
+                        e.stop_propagation();
+                        match e.key(){
+                            Key::Escape=>{e.prevent_default();query.set(String::new());focus_reader();}
+                            Key::Enter=>{if let Some(p)=first{e.prevent_default();choose.call(p)}}
+                            _=>{}
+                        }
+                    }
+                }
+                if !needle.is_empty(){
+                    small {role:"status","{matches.len()} matching files"}
+                    if matches.is_empty(){p {"No files match this path. Try a shorter name or press Esc to clear."}}
+                    for &(p,i) in matches.iter().take(search_limit()){
+                        button {class:"search-result",key:"{i}",onclick:move |_|choose.call(p),"{files[i].filename}" span {class:"badge","{kind(&files[i].filename)}"}}
+                    }
+                    if matches.len()>search_limit(){button {onclick:move |_|search_limit+=FILE_BATCH,"Show more matches"}}
+                }else{
                 small {"FILE GROUPS"}
                 if !selected.read().is_empty(){div {class:"organize",
                     input {aria_label:"Group name",placeholder:"Group name",value:"{name}",onkeydown:move|e|e.stop_propagation(),oninput:move|e|name.set(e.value())}
@@ -178,7 +246,7 @@ fn Reader(pr: String, head: String, files: Vec<File>, initial: Review, dark: boo
                             Order {pos:gi,len:groups.len(),onmove:move |other|{let mut s=state();s.groups.swap(gi,other);save.call(s)}}
                         }
                         if expanded.read().contains(&g.name){
-                            for (fi,path) in g.files.iter().enumerate(){
+                            for (fi,path) in g.files.iter().take(visible.read().get(&g.name).copied().unwrap_or(FILE_BATCH)).enumerate(){
                                 if !g.custom && (fi==0 || directory(&g.files[fi-1])!=directory(path)){
                                     button {class:"folder",aria_expanded:!folders.read().contains(&(g.name.clone(),directory(path).into())),onclick:{
                                         let k=(g.name.clone(),directory(path).to_owned());move |_|{let mut set=folders.write();if !set.remove(&k){set.insert(k.clone());}}
@@ -199,8 +267,12 @@ fn Reader(pr: String, head: String, files: Vec<File>, initial: Review, dark: boo
                                 }
                                 }
                             }
+                            if g.files.len()>visible.read().get(&g.name).copied().unwrap_or(FILE_BATCH){
+                                button {onclick:{let name=g.name.clone();move |_|*visible.write().entry(name.clone()).or_insert(FILE_BATCH)+=FILE_BATCH},"Show more files"}
+                            }
                         }
                     }
+                }
                 }
             }
             article {
@@ -209,8 +281,9 @@ fn Reader(pr: String, head: String, files: Vec<File>, initial: Review, dark: boo
                     button {disabled:previous.is_none(),onclick:move |_|if let Some(p)=previous{jump.call(p)}, "Previous " kbd {"K"}}
                     button {disabled:next.is_none(),onclick:move |_|if let Some(p)=next{jump.call(p)}, "Next " kbd {"J"}}
                 }
+                {draft_tray(pr.clone(),head,anchor)}
                 if let Some(f)=active().and_then(|i|files.get(i)){
-                    small {"UNIFIED DIFF · {f.status}"} h2 {"{f.filename}"}
+                    small {"UNIFIED DIFF · {f.change_type()}"} h2 {"{f.filename}"}
                     div {class:"tools",onkeydown:keep_native_space,
                         a {href:"https://github.com/{pr}/files#diff-{hash(&f.filename)}",target:"_blank",rel:"noopener noreferrer","GitHub diff ↗"}
                         button {title:"Toggle reviewed (Space)",onclick:move |_|toggle.call(()),
@@ -219,11 +292,10 @@ fn Reader(pr: String, head: String, files: Vec<File>, initial: Review, dark: boo
                         }
                         b {"{state.read().status(f)}"}
                     }
-                    if let Some(patch)=&f.patch{
+                    if let Some(patch)=f.patch(){
                         diff::Diff {key:"{f.filename}",path:f.filename.clone(),patch:patch.clone(),dark,oncomment:move |a|anchor.set(Some(a)),editing:anchor.read().is_some()}
                     } else {p {"GitHub supplied no text patch for this file. Open the GitHub diff for details."}}
                 }else{div {class:"empty",span {class:"diff-icon",aria_hidden:"true","±"} small {"DIFF VIEWER"} h2 {"Choose a file to begin"} p {"Expand a group and select a file to read its changes."}}}
-                {draft_tray(pr.clone(),head,anchor)}
             }
         }
     }

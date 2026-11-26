@@ -1805,6 +1805,7 @@ dependencies = [
  "dioxus",
  "dirs",
  "futures-lite",
+ "futures-util",
  "gloo-net",
  "serde",
  "serde_json",

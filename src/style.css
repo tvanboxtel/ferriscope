@@ -28,7 +28,17 @@
   --page: #1b1724; --panel: #282331; --header: #30213e; --subtle: #3b3248;
   --line: #4b3f5b; --muted: #c2b6ce; --teal: #d5acf6; --hover: #40354a; --selected: #493650;
 }
-header select { font: inherit; padding: .5rem; border-radius: .58rem; border: 1px solid #61747d; background: #233f49; color: white; }
+.preferences { padding: 0 1.5rem .65rem; color: var(--muted); font-size: .82rem; }
+.preferences details { position: relative; width: fit-content; }
+.preferences summary { cursor: pointer; padding: .2rem 0; }
+.preferences fieldset {
+  position: absolute; inset-inline-start: 0; bottom: calc(100% + .25rem); z-index: 2;
+  display: flex; flex-wrap: wrap; gap: .75rem; width: max-content; max-width: calc(100vw - 3rem);
+  margin: 0; padding: .55rem .85rem; border: 1px solid var(--line); border-radius: .6rem;
+  background: var(--panel); box-shadow: 0 .35rem 1.25rem #142f3926;
+}
+.preferences label { display: inline-flex; align-items: center; gap: .25rem; padding: .3rem 0; cursor: pointer; }
+.preferences input { accent-color: var(--teal); }
 body { margin: 0; }
 #main { min-height: 100vh; }
 header, .brand, .row, .order, form, .tools, .organize { display: flex; align-items: center; gap: .55rem; }
@@ -53,7 +63,7 @@ button:disabled { opacity: .36; cursor: default; }
 form button, .organize button { background: #c1efdc; border-color: transparent; color: #164c40; font-weight: 650; white-space: nowrap; }
 main { display: grid; grid-template-columns: clamp(18rem, 30vw, 28rem) minmax(0, 1fr); gap: 1rem; padding: 1rem; }
 aside, article, .intro { border: 1px solid var(--line); border-radius: 1rem; background: var(--panel); box-shadow: 0 3px 14px #20374308; }
-aside, article { height: calc(100dvh - 6.75rem); overflow: auto; }
+aside, article { height: calc(100dvh - 9rem); overflow: auto; }
 aside { padding: 1.35rem; }
 article { padding: clamp(1.25rem, 3vw, 3rem); }
 h1,h2,h3 { letter-spacing: -.045em; line-height: 1.2; margin: .45rem 0; overflow-wrap: anywhere; }
@@ -69,6 +79,8 @@ aside section { border-bottom: 1px solid var(--line); }
 .count,.badge,.tools b { border-radius: .4rem; background: var(--subtle); color: var(--muted); font-size: .72rem; padding: .08rem .45rem; }
 .count { margin-left: auto; font-variant-numeric: tabular-nums; }
 .badge { display: table; margin-top: .25rem; }
+#file-search { width:100%; background:var(--panel); color:var(--ink); margin-bottom:.8rem; }
+.search-result { display:block; width:100%; text-align:left; overflow-wrap:anywhere; margin-top:.35rem; }
 .folder { display:flex; align-items:center; gap:.5rem; width:100%; border:none; background:var(--subtle); color:var(--muted); font:600 .78rem/1.5 system-ui; text-align:left; overflow-wrap:anywhere; }
 .folder ~ .row { padding-left:.65rem; }
 .line-comment { font:inherit; font-size:.72rem; color:var(--muted); margin-right:.7rem; padding:.08rem .35rem; min-width:4em; text-align:right; }

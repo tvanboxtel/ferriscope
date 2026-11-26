@@ -1,55 +1,99 @@
 # Ferriscope
 
-A local-first GitHub PR reader. Paste a `github.com` pull request URL, read a diff, then select related files with their checkboxes. Give the selection a name and click **Review together**. The arrows reorder groups or files. **Mark reviewed** saves immediately; reopen the same URL or choose **Open / refresh** after a push.
+Review a GitHub pull request by behavior, not alphabetical path. Put a handler beside its test, skip the lockfile, and resume where you left off.
 
-## Run
+**For private repositories or publishing reviews, use the desktop app.** The browser is a public PR reader. It cannot sign in, even if you’re signed in to github.com in another tab.
 
-Use rustup: `rust-toolchain.toml` selects Rust **1.100.0** and the WASM target. The lockfile and manifest pin Dioxus **0.7.10**. Install the matching CLI into this checkout:
+| What you want to do | Desktop | Browser |
+| --- | --- | --- |
+| Read public PRs, search files, organize diffs, track progress | Yes | Yes |
+| Read private PRs | With your `gh` login | No |
+| Post inline comments, approve, or request changes | Yes | No |
+
+## Launch the desktop app
+
+From the repo root:
 
 ```sh
-cargo install dioxus-cli --version '=0.7.10' --locked --root target/tools
-target/tools/bin/dx serve --platform web
-```
-
-Open the localhost URL printed by `dx`. Browser access is anonymous, for public PRs only, and subject to GitHub's unauthenticated API quota.
-
-For desktop, install the [Dioxus desktop system dependencies](https://dioxuslabs.com/learn/0.7/getting_started/) (on Linux, including GTK 3 and WebKitGTK 4.1) and the GitHub CLI. Use a `gh` login with read access to the repository:
-
-```sh
-gh auth status --hostname github.com
 cargo run --locked --features desktop
 ```
 
-Try `https://github.com/octocat/Hello-World/pull/1` for a small live diff. Both platforms fetch fresh metadata and all pages of files on open, and reject a changing snapshot or a PR beyond GitHub's 3,000-file limit rather than silently dropping files. Binary and omitted patches link out to GitHub.
+When you see `Running target/debug/ferriscope`, **switch to the Ferriscope window**. Paste a PR URL into the field at the top and click **Open / refresh**. The URL goes in the app, not the terminal.
 
-## How review state works
+<details>
+<summary><strong>First time? Install the prerequisites and get the source</strong></summary>
 
-In the reader, press **J** for the next file or **K** for the previous file, or use the buttons above the diff. Navigation follows your group and file order and opens the destination group. Shortcuts do not intercept text typed into the URL or group name fields. Diffs highlight recognized source extensions locally; other files retain plain unified-diff coloring.
+1. Install [Rust via rustup](https://rustup.rs/), [GitHub CLI](https://cli.github.com/), and the [Dioxus desktop dependencies for your OS](https://dioxuslabs.com/learn/0.7/getting_started/). Linux needs GTK 3 and WebKitGTK 4.1 development libraries. Desktop does **not** need the Dioxus CLI.
+2. Clone the repo:
+   ```sh
+   git clone https://github.com/tvanboxtel/ferriscope.git
+   cd ferriscope
+   ```
+3. Run `gh auth status --hostname github.com`. If needed, sign in with `gh auth login --hostname github.com`.
+4. Run the launch command above. The first build downloads the pinned toolchain and compiles dependencies.
 
-Classification uses the first case-insensitive path match: generated directories and lockfiles, test directories or filename conventions, documentation, infrastructure (including migrations), known source extensions, then Other. The complete rules are in `src/lib.rs`. Every group starts collapsed, including saved custom groups. Expand a group to see its files, then choose a file to open its diff.
+</details>
 
-Each PR has its own ordered groups, paths and reviewed fingerprints. The browser stores only this small JSON record in localStorage for the current origin. Desktop atomically replaces a JSON file in the OS local data directory under `ferriscope/`. Neither stores tokens or patch contents. Use the same browser profile and origin to resume.
+<details>
+<summary><strong>Install an optimized desktop binary</strong></summary>
 
-A reviewed fingerprint covers the patch, change type and rename source, falling back to the blob SHA when no patch is supplied. It does not include the PR head SHA. New paths enter their default groups; disappeared paths leave the list. A path renamed between refreshes is treated as new.
+From the repo root:
 
-## Tests
+```sh
+cargo install --locked --path . --features desktop
+```
 
-Default file groups show collapsible directory sections; custom groups keep their manual sequence. With the reader focused, **Space** toggles the active file’s local reviewed status. Space on a focused button or checkbox still activates that control.
+With Cargo’s bin directory on your `PATH`, run `ferriscope` from any directory. Repeat the install command after updating the source.
 
-**Desktop inline reviews:** select the numbered `+` beside a patch line, write a note, and choose **Save draft**. Saved comments survive reopening the PR. **Submit … inline comments to GitHub** publishes the batch as one comment-only review via your `gh` login (not an approval). If the PR head changes, copy the old notes and re-anchor them before submitting. The browser remains read-only on GitHub.
+</details>
+
+## Run the public PR reader in a browser
+
+**Once**, from the repo root with rustup installed:
+
+```sh
+cargo install dioxus-cli --version '=0.7.10' --locked --root target/tools
+```
+
+**Each launch:**
+
+```sh
+target/tools/bin/dx serve --platform web --port 8080
+```
+
+Open [localhost:8080](http://127.0.0.1:8080), then paste a **public** PR URL inside Ferriscope. Keep the terminal open; `Ctrl+C` stops the server. No `PATH` change is required. Anonymous GitHub API rate limits apply.
+
+## At the keyboard
+
+| Key | Action |
+| --- | --- |
+| `/` | Search all changed file paths, including collapsed groups |
+| `Enter` / `Esc` in search | Open the first match / return to the tree |
+| `J` / `K` | Next / previous file in review order |
+| `Space` | Toggle the active file’s local reviewed status |
+
+**Organize:** check related files, name the group, and choose **Review together**. Use the arrows to reorder. Reopen the same PR to resume; after a push, only reviewed files whose diff changed need another look. Progress is local. In the browser, use the same profile, host, and port.
+
+**Publish (desktop):** use the numbered `+` beside a diff line to save an inline draft, or open **Review changes** directly. Choose **Comment**, **Approve**, or **Request changes**, then submit. Marking a file reviewed does **not** submit a GitHub review. GitHub won’t let you approve or request changes on your own PR.
+
+<details>
+<summary><strong>Development and performance checks</strong></summary>
 
 ```sh
 cargo test --locked --features desktop
 ```
 
-`tests/mixed.json` contains a handler, its test, a migration, docs, a lockfile and a binary. The Rust acceptance test saves and reloads the arrangement, changes only the test patch, and checks that the handler stays reviewed.
-
-For a browser-level check, start the web build above, then run (with Node and a Chromium executable installed):
+With the web server running, Node installed, and `CHROME` pointing to a Chromium executable:
 
 ```sh
 npm install --prefix target/browser-test playwright-core
-NODE_PATH="$PWD/target/browser-test/node_modules" CHROME=/path/to/chromium \
-  APP_URL=http://127.0.0.1:8080 node tests/browser.cjs
+export NODE_PATH="$PWD/target/browser-test/node_modules"
+export CHROME=/path/to/chromium
+export APP_URL=http://127.0.0.1:8080
+node tests/browser.cjs
+CHECK_BOUNDS=1 node tests/performance.cjs
 ```
 
-The browser test intercepts only the fixture PR's GitHub API calls. Set `LIVE=1` to also read a public GitHub diff before running the fixture workflow.
+The workflow test uses `tests/mixed.json`; set `LIVE=1` to also open a real public PR. The performance fixture uses 600 files, a 3,000-line Rust patch, and 100 ms simulated API latency per request.
+
+</details>

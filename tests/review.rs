@@ -15,7 +15,11 @@ fn reopen_then_refresh_only_the_test() {
     state.toggle(&files[2]);
     let bytes = serde_json::to_vec(&state).unwrap();
     let mut resumed: Review = serde_json::from_slice(&bytes).unwrap();
-    files[2].patch = Some("@@ -0,0 +1 @@\n+#[test] fn rejects_missing_account() {}".into());
+    files[2] = serde_json::from_value(serde_json::json!({
+        "filename":"tests/accounts.rs","sha":"new","status":"added",
+        "patch":"@@ -0,0 +1 @@\n+#[test] fn rejects_missing_account() {}"
+    }))
+    .unwrap();
     resumed.reconcile(&files);
     assert_eq!(resumed.groups[0].files, [pair[1].clone(), pair[0].clone()]);
     assert_eq!(

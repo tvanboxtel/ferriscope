@@ -66,10 +66,51 @@ pub mod desktop {
         notes: Vec<Note>,
     }
 
-    async fn publish(pr: &str, draft: &Draft) -> Result<(), String> {
-        publish_with(std::ffi::OsStr::new("gh"), pr, draft).await
+    #[derive(Clone, Copy, PartialEq)]
+    enum Outcome {
+        Comment,
+        Approve,
+        Changes,
     }
-    async fn publish_with(gh: &std::ffi::OsStr, pr: &str, draft: &Draft) -> Result<(), String> {
+    impl Outcome {
+        fn label(self) -> &'static str {
+            match self {
+                Self::Comment => "Comment",
+                Self::Approve => "Approve",
+                Self::Changes => "Request changes",
+            }
+        }
+        fn payload(self, draft: &Draft, summary: &str) -> Result<String, String> {
+            let body = summary.trim();
+            let (event, body) = match self {
+                Self::Changes if body.is_empty() => {
+                    return Err("Explain the changes you’re requesting.".into());
+                }
+                Self::Comment if body.is_empty() && draft.notes.is_empty() => {
+                    return Err("Add a summary or an inline comment.".into());
+                }
+                Self::Changes => ("REQUEST_CHANGES", body),
+                Self::Approve => ("APPROVE", body),
+                Self::Comment => (
+                    "COMMENT",
+                    if body.is_empty() {
+                        "Inline review comments"
+                    } else {
+                        body
+                    },
+                ),
+            };
+            Ok(serde_json::json!({"event":event,"body":body,"commit_id":draft.head,"comments":draft.notes}).to_string())
+        }
+    }
+    async fn publish_with(
+        gh: &std::ffi::OsStr,
+        pr: &str,
+        draft: &Draft,
+        outcome: Outcome,
+        summary: &str,
+    ) -> Result<(), String> {
+        let body = outcome.payload(draft, summary)?;
         let api = format!("repos/{}", pr.replace("/pull/", "/pulls/"));
         let head = async_process::Command::new(gh)
             .args(["api", "--hostname", "github.com", &api, "--jq", ".head.sha"])
@@ -84,9 +125,6 @@ pub mod desktop {
                 "The PR changed. Refresh and re-anchor your notes before submitting.".into(),
             );
         }
-        let body =
-            serde_json::json!({"event":"COMMENT","body":"Inline review comments","commit_id":draft.head,"comments":draft.notes})
-                .to_string();
         let mut child = async_process::Command::new(gh)
             .args([
                 "api",
@@ -143,7 +181,13 @@ esac"#).unwrap();
             }],
         };
         let run = |d: &Draft| {
-            futures_lite::future::block_on(publish_with(gh.as_os_str(), "o/r/pull/1", d))
+            futures_lite::future::block_on(publish_with(
+                gh.as_os_str(),
+                "o/r/pull/1",
+                d,
+                Outcome::Comment,
+                "",
+            ))
         };
         let payload = gh.with_extension("payload");
         assert!(run(&draft).is_err());
@@ -157,6 +201,22 @@ esac"#).unwrap();
             json["comments"][0],
             serde_json::json!({"path":"src/a.rs","side":"LEFT","line":4,"body":"Why remove this?"})
         );
+    }
+    #[test]
+    fn verdicts_without_inline_notes() {
+        let d = Draft::default();
+        for (outcome, summary, event) in [
+            (Outcome::Approve, "", "APPROVE"),
+            (Outcome::Changes, "Please add tests", "REQUEST_CHANGES"),
+            (Outcome::Comment, "Thanks", "COMMENT"),
+        ] {
+            let json: serde_json::Value =
+                serde_json::from_str(&outcome.payload(&d, summary).unwrap()).unwrap();
+            assert_eq!(json["event"], event);
+            assert_eq!(json["body"], summary);
+        }
+        assert!(Outcome::Changes.payload(&d, " ").is_err());
+        assert!(Outcome::Comment.payload(&d, " ").is_err());
     }
     #[test]
     fn maps_hunks_and_no_newline_marker() {
@@ -178,6 +238,9 @@ esac"#).unwrap();
         let mut message = use_signal(|| loaded.clone().err().unwrap_or_default());
         let mut busy = use_signal(|| false);
         let mut text = use_signal(String::new);
+        let mut open = use_signal(|| false);
+        let mut outcome = use_signal(|| Outcome::Comment);
+        let mut summary = use_signal(String::new);
         let stale = !draft.read().notes.is_empty() && draft.read().head != head;
         let persist = use_callback(move |next: Draft| {
             let json = serde_json::to_string(&next).unwrap();
@@ -197,7 +260,8 @@ esac"#).unwrap();
         let notes = draft.read().notes.clone();
         rsx! {
             if !message.read().is_empty(){p {role:"status","{message}"}}
-            if target.is_some() || !notes.is_empty(){
+            button {onkeydown:crate::keep_native_space,onclick:move |_|open.toggle(), "Review changes ({notes.len()} inline)"}
+            if open() || target.is_some() || !notes.is_empty(){
                 section {class:"drafts",onkeydown:move|e|e.stop_propagation(),
                     strong {"Draft review · {notes.len()} saved"}
                     if stale {p {"These notes refer to an older revision. Copy their text, remove them, then select lines in the new diff."}}
@@ -214,14 +278,18 @@ esac"#).unwrap();
                         },"Save draft"}
                         button {onclick:move |_|{text.set(String::new());anchor.set(None)},"Cancel"}
                     }
-                    if !notes.is_empty(){
-                        button {disabled:busy()||stale||anchor.read().is_some(),onclick:move |_|{
-                            if busy(){return} busy.set(true);let pr=pr.clone();let d=draft();
-                            spawn(async move{match publish(&pr,&d).await{
-                                Ok(())=>{if persist.call(Draft::default()){message.set("Review posted to GitHub.".into())}else{draft.set(Draft::default());message.set("Review posted, but the local draft could not be cleared. Do not resubmit it.".into())}},
+                    if anchor.read().is_none(){
+                        label {"Review outcome " select {disabled:busy(),onchange:move |e|outcome.set(match e.value().as_str(){"Approve"=>Outcome::Approve,"Request changes"=>Outcome::Changes,_=>Outcome::Comment}),
+                            for choice in [Outcome::Comment,Outcome::Approve,Outcome::Changes]{option {value:choice.label(),selected:outcome()==choice,"{choice.label()}"}}
+                        }}
+                        label {"Review summary" textarea {value:"{summary}",disabled:busy(),oninput:move|e|summary.set(e.value()),placeholder:if outcome()==Outcome::Changes {"Explain the changes you’re requesting (required)"}else{"Add a review summary"}}}
+                        button {disabled:busy()||stale||loaded.is_err()||outcome().payload(&draft.read(),&summary.read()).is_err(),onclick:move |_|{
+                            if busy(){return} busy.set(true);let pr=pr.clone();let mut d=draft();if d.notes.is_empty(){d.head=head.clone()}let verdict=outcome();let body=summary();
+                            spawn(async move{match publish_with(std::ffi::OsStr::new("gh"),&pr,&d,verdict,&body).await{
+                                Ok(())=>{summary.set(String::new());outcome.set(Outcome::Comment);open.set(false);if persist.call(Draft::default()){message.set("Review posted to GitHub.".into())}else{draft.set(Draft::default());message.set("Review posted, but the local draft could not be cleared. Do not resubmit it.".into())}},
                                 Err(e)=>message.set(e)
                             }busy.set(false);});
-                        },"Submit {notes.len()} inline comments to GitHub"}
+                        },"Submit to GitHub: {outcome().label()}"}
                     }
                 }
             }

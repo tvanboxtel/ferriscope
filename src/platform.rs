@@ -1,4 +1,5 @@
 use ferriscope::{File, Review};
+use futures_util::{StreamExt, TryStreamExt, stream};
 use serde::Deserialize;
 
 #[cfg(target_arch = "wasm32")]
@@ -46,11 +47,24 @@ pub async fn fetch(key: &str) -> Result<(String, Vec<File>), String> {
     if meta.changed_files > 3000 {
         return Err("GitHub's files API is limited to 3,000 files per PR.".into());
     }
-    let mut files = vec![];
-    for page in 1..=meta.changed_files.div_ceil(100) {
-        let data = request(&format!("{api}/files?per_page=100&page={page}")).await?;
-        files.extend(serde_json::from_str::<Vec<File>>(&data).map_err(|e| e.to_string())?);
-    }
+    // Keep GitHub order while overlapping latency; never fan out to all 30 pages.
+    let pages = stream::iter(1..=meta.changed_files.div_ceil(100))
+        .map(|page| {
+            let path = format!("{api}/files?per_page=100&page={page}");
+            async move {
+                serde_json::from_str::<Vec<File>>(&request(&path).await?).map_err(|e| e.to_string())
+            }
+        })
+        .buffered(4);
+    let files = pages
+        .try_fold(
+            Vec::with_capacity(meta.changed_files),
+            |mut files, page| async move {
+                files.extend(page);
+                Ok(files)
+            },
+        )
+        .await?;
     if files.len() != meta.changed_files || parse(&request(&api).await?)? != meta {
         return Err("The PR changed while loading. Try refreshing.".into());
     }

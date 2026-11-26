@@ -8,11 +8,13 @@ static THEMES: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
 #[component]
 pub fn Diff(
     path: String,
-    patch: String,
+    patch: std::rc::Rc<str>,
     dark: bool,
     oncomment: EventHandler<crate::comments::Anchor>,
     editing: bool,
 ) -> Element {
+    const BATCH: usize = 250;
+    let mut limit = use_signal(|| BATCH);
     let ext = path
         .rsplit('/')
         .next()
@@ -29,10 +31,10 @@ pub fn Diff(
     let fresh = || syntax.map(|s| HighlightLines::new(s, theme));
     let (mut old, mut new) = (fresh(), fresh());
     let mut rows = Vec::new();
-    for (line, coord) in patch
+    let mut lines = patch
         .split_inclusive('\n')
-        .zip(crate::comments::coordinates(&patch))
-    {
+        .zip(crate::comments::coordinates(&patch));
+    for (line, coord) in lines.by_ref().take(limit()) {
         let (class, lane) = match line.as_bytes()[0] {
             b'+' => ("add", &mut new),
             b'-' => ("del", &mut old),
@@ -68,5 +70,9 @@ pub fn Diff(
             } else { {line.trim_end_matches('\n')} }
         }});
     }
-    rsx! { pre { for row in rows { {row} } } }
+    rsx! { pre { for row in rows { {row} } }
+        if lines.next().is_some(){
+            button {onclick:move |_|limit+=BATCH,"Show more lines"}
+        }
+    }
 }

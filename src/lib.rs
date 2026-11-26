@@ -100,25 +100,35 @@ pub fn kind(path: &str) -> &'static str {
 #[derive(Clone, Deserialize, PartialEq)]
 pub struct File {
     pub filename: String,
-    pub sha: String,
-    pub status: String,
-    pub patch: Option<String>,
-    pub previous_filename: Option<String>,
+    sha: String,
+    status: String,
+    patch: Option<std::rc::Rc<str>>,
+    previous_filename: Option<String>,
+    #[serde(skip)]
+    fingerprint: std::cell::OnceCell<String>,
 }
 pub fn hash(text: &str) -> String {
     format!("{:x}", Sha256::digest(text.as_bytes()))
 }
 impl File {
-    pub fn fingerprint(&self) -> String {
-        hash(
-            &serde_json::to_string(&(
-                &self.status,
-                &self.previous_filename,
-                &self.patch,
-                self.patch.is_none().then_some(&self.sha),
-            ))
-            .unwrap(),
-        )
+    pub fn change_type(&self) -> &str {
+        &self.status
+    }
+    pub fn patch(&self) -> Option<&std::rc::Rc<str>> {
+        self.patch.as_ref()
+    }
+    pub fn fingerprint(&self) -> &str {
+        self.fingerprint.get_or_init(|| {
+            hash(
+                &serde_json::to_string(&(
+                    &self.status,
+                    &self.previous_filename,
+                    &self.patch,
+                    self.patch.is_none().then_some(&self.sha),
+                ))
+                .unwrap(),
+            )
+        })
     }
 }
 
@@ -204,7 +214,7 @@ impl Review {
     pub fn status(&self, f: &File) -> &'static str {
         match self.reviewed.get(&f.filename) {
             None => "Unread",
-            Some(h) if *h == f.fingerprint() => "Reviewed",
+            Some(h) if h == f.fingerprint() => "Reviewed",
             _ => "Changed",
         }
     }
@@ -212,7 +222,8 @@ impl Review {
         if self.status(f) == "Reviewed" {
             self.reviewed.remove(&f.filename);
         } else {
-            self.reviewed.insert(f.filename.clone(), f.fingerprint());
+            self.reviewed
+                .insert(f.filename.clone(), f.fingerprint().into());
         }
     }
 }

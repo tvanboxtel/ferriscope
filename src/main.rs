@@ -7,6 +7,17 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 fn main() {
+    #[cfg(feature = "desktop")]
+    {
+        use dioxus::desktop::{Config, WindowBuilder, icon_from_memory};
+        let window = WindowBuilder::new().with_title("Ferriscope");
+        let icon = icon_from_memory(include_bytes!("../assets/ferriscope.png"))
+            .expect("valid embedded Ferriscope icon");
+        LaunchBuilder::desktop()
+            .with_cfg(Config::new().with_window(window).with_icon(icon))
+            .launch(App);
+    }
+    #[cfg(not(feature = "desktop"))]
     dioxus::launch(App)
 }
 
@@ -55,7 +66,7 @@ fn App() -> Element {
         document::Title {"Ferriscope · PR reader"}
         style { {include_str!("style.css")} }
         div {class:"workspace", "data-theme":"{theme}",
-        header {div {class:"brand", span {class:"mark",aria_hidden:"true","≋"} strong {"Ferriscope"}} small {"PR READER"}
+        header {div {class:"brand", span {class:"mark",aria_hidden:"true",dangerous_inner_html:include_str!("../assets/ferriscope.svg")} strong {"Ferriscope"}} small {"PR READER"}
             form {onsubmit:open,
                 input {aria_label:"GitHub PR URL",placeholder:"https://github.com/owner/repo/pull/123",value:"{url}",oninput:move|e|url.set(e.value())}
                 button {disabled:busy(), if busy() {"Loading…"} else {"Open / refresh"}}

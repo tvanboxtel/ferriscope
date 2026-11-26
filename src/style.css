@@ -46,7 +46,7 @@ header { padding: .9rem clamp(1rem, 3vw, 3rem); background: var(--header); color
 .brand { gap: .7rem; }
 .brand strong { font-size: 1.35rem; letter-spacing: -.05em; }
 .mark, .diff-icon { display: grid; place-items: center; border-radius: .65rem; font: bold 1.65rem/1 monospace; }
-.mark { width: 2.2rem; height: 2.2rem; background: #baf0dc; color: #19544f; }
+.mark, .mark svg { width: 2.2rem; height: 2.2rem; }
 small { font-size: .67rem; letter-spacing: .14em; font-weight: 750; color: var(--muted); }
 header small { color: #b5c9cb; border-left: 1px solid #536c72; padding-left: .85rem; margin-left: .4rem; }
 form { flex: 1; justify-content: flex-end; }

@@ -1,0 +1,18 @@
+Ferriscope for Linux
+
+Extract the archive and run `sh install.sh` from the extracted directory.
+No Rust, Cargo, Dioxus CLI, or sudo is required. Open Ferriscope from your
+application menu, or run ~/.local/bin/ferriscope.
+
+You need a compatible Linux distribution and CPU architecture, the GTK 3
+and WebKitGTK 4.1 runtime libraries (and their dependencies), and GitHub CLI
+on PATH. Run `gh auth login --hostname github.com` if you haven't signed in.
+If the executable doesn't start, run `ldd ./ferriscope` in this directory
+to check for missing libraries. A newer glibc build may not run on older
+distributions; ask for a build targeting your distribution.
+
+To update, extract the new archive and run its installer again.
+To uninstall, remove ~/.local/bin/ferriscope and the ferriscope.desktop file
+under ${XDG_DATA_HOME:-~/.local/share}/applications, and ferriscope.svg under
+${XDG_DATA_HOME:-~/.local/share}/icons/hicolor/scalable/apps. Review data is separate
+and is not removed by an update or uninstall.

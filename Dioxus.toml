@@ -1,0 +1,9 @@
+[application]
+name = "Ferriscope"
+
+[web.app]
+title = "Ferriscope"
+
+[bundle]
+identifier = "com.github.tvanboxtel.ferriscope"
+icon = ["assets/ferriscope.png"]

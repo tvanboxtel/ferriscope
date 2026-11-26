@@ -1,4 +1,4 @@
-# Ferriscope
+# <img src="assets/ferriscope.svg" width="40" height="40" alt=""> Ferriscope
 
 Review a GitHub pull request by behavior, not alphabetical path. Put a handler beside its test, skip the lockfile, and resume where you left off.
 
@@ -10,7 +10,36 @@ Review a GitHub pull request by behavior, not alphabetical path. Put a handler b
 | Read private PRs | With your `gh` login | No |
 | Post inline comments, approve, or request changes | Yes | No |
 
-## Launch the desktop app
+## Install the desktop app
+
+**Install or update to the latest `main`**, from any directory:
+
+```sh
+cargo +1.100.0 install --git https://github.com/tvanboxtel/ferriscope.git --branch main --locked --features desktop ferriscope
+```
+
+Then run **`ferriscope`**. Run the same install command later to update. No clone, `cargo run`, or Dioxus CLI needed.
+
+This builds an optimized binary locally. You’ll need [rustup](https://rustup.rs/) (`rustup toolchain install 1.100.0`), the [desktop build dependencies](https://dioxuslabs.com/learn/0.7/getting_started/), and Cargo’s bin directory on your `PATH`. Sign in to [GitHub CLI](https://cli.github.com/) with `gh auth login` before opening a PR.
+
+**macOS:** The native Dioxus desktop app targets macOS too. Install Xcode Command Line Tools (`xcode-select --install`), Rust, and `gh`, then use the same Cargo command above. This installs a terminal-launchable executable, not a signed `.app` or `.dmg`. The prebuilt Linux archive does not run on macOS. Linux is tested here; the macOS build has not been verified.
+
+<details>
+<summary>Linux binary archive (no Rust compiler needed)</summary>
+
+**Have a Linux binary archive?** Extract `ferriscope-…-linux-….tar.gz`, open the extracted folder in a terminal, and run:
+
+```sh
+sh install.sh
+```
+
+Launch **Ferriscope** from your application menu or run `~/.local/bin/ferriscope`. No compiler, source checkout, or `sudo` needed. The archive includes [runtime requirements and uninstall instructions](packaging/linux/INSTALL.txt). It targets the build machine’s Linux ABI and CPU, not every Linux distribution.
+
+**To build a shareable Linux archive** from this repo, run `sh packaging/linux/package.sh`. Send the resulting `.tar.gz` in `target/dist/`, not the source tree. Recipients use their own `gh` login.
+
+</details>
+
+## Run from a checkout (development)
 
 From the repo root:
 
@@ -31,19 +60,6 @@ When you see `Running target/debug/ferriscope`, **switch to the Ferriscope windo
    ```
 3. Run `gh auth status --hostname github.com`. If needed, sign in with `gh auth login --hostname github.com`.
 4. Run the launch command above. The first build downloads the pinned toolchain and compiles dependencies.
-
-</details>
-
-<details>
-<summary><strong>Install an optimized desktop binary</strong></summary>
-
-From the repo root:
-
-```sh
-cargo install --locked --path . --features desktop
-```
-
-With Cargo’s bin directory on your `PATH`, run `ferriscope` from any directory. Repeat the install command after updating the source.
 
 </details>
 

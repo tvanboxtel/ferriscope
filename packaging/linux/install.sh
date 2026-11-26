@@ -1,0 +1,23 @@
+#!/bin/sh
+# Install the binary next to this script, never download or compile anything.
+set -eu
+cd "$(dirname "$0")"
+bin="$HOME/.local/bin"
+apps="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+icons="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps"
+mkdir -p "$bin" "$apps" "$icons"
+install -m644 ferriscope.svg "$icons/ferriscope.svg"
+install -m755 ferriscope "$bin/ferriscope"
+# Desktop launchers need an absolute path: their PATH often differs from zsh's.
+exec_path=$(printf '%s' "$bin/ferriscope" | sed 's/[\\`"$]/\\&/g; s/%/%%/g; s/\\/\\\\/g')
+cat > "$apps/ferriscope.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Ferriscope
+Comment=Read and review GitHub pull requests
+Exec="$exec_path"
+Icon=ferriscope
+Terminal=false
+Categories=Development;
+EOF
+printf 'Installed. Open Ferriscope from your application menu or run "%s/ferriscope".\n' "$bin"

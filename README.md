@@ -9,7 +9,7 @@
 | Your computer | Download | Install |
 | --- | --- | --- |
 | **Mac with Apple Silicon** (M-series) | [Ferriscope for Mac (.zip)](https://github.com/tvanboxtel/ferriscope/releases/download/v0.1.3/Ferriscope-macOS-arm64.zip) | Unzip, drag **Ferriscope.app** into **Applications**, then open it. |
-| **Linux x86-64** | [Ferriscope for Linux (.tar.gz)](https://github.com/tvanboxtel/ferriscope/releases/download/v0.1.3/ferriscope-0.1.3-linux-x86_64.tar.gz) | Extract, run `sh install.sh` inside the extracted folder, then open **Ferriscope** from the applications menu. No `sudo`. |
+| **Linux x86-64** | [Ferriscope for Linux (.tar.gz)](https://github.com/tvanboxtel/ferriscope/releases/download/v0.1.3/ferriscope-0.1.3-linux-x86_64.tar.gz) | Check the runtime requirements below, extract, and run `sh install.sh` inside the extracted folder. Then open **Ferriscope** from the applications menu. |
 
 **First launch:** Ferriscope uses your [GitHub CLI](https://cli.github.com/) login. If you haven’t signed in, run `gh auth login --hostname github.com` in a terminal. Then paste a PR URL **in the Ferriscope window** and click **Open / refresh**. Press **J** to start reading.
 
@@ -23,6 +23,8 @@ This build is ad-hoc signed, **not Apple notarized**. Gatekeeper may block it. I
 <details>
 <summary>Linux: copy-paste install, requirements, and updates</summary>
 
+The archive needs compatible GTK 3, WebKitGTK 4.1, and libxdo runtime libraries. **On current Arch Linux**, `xdotool` provides `libxdo.so.4`, but the v0.1.3 download requires `libxdo.so.3`. [Build from source](#other-ways-to-run-ferriscope) to link against the version installed on your system.
+
 Run from any directory:
 
 ```sh
@@ -31,7 +33,7 @@ tar -xzf ferriscope-0.1.3-linux-x86_64.tar.gz &&
 sh ferriscope-0.1.3-linux-x86_64/install.sh
 ```
 
-The binary needs compatible GTK 3 and WebKitGTK 4.1 runtime libraries. The installer registers the launcher and icon and places the executable at `~/.local/bin/ferriscope`. To update, close the app and install the [latest release](https://github.com/tvanboxtel/ferriscope/releases/latest) the same way; saved reviews stay on disk. [Uninstall instructions](packaging/linux/INSTALL.txt).
+The installer registers the launcher and icon and places the executable at `~/.local/bin/ferriscope` without `sudo`. To update, close the app and install a compatible [release](https://github.com/tvanboxtel/ferriscope/releases/latest) the same way; saved reviews stay on disk. [Uninstall instructions](packaging/linux/INSTALL.txt).
 
 </details>
 
@@ -49,7 +51,7 @@ The **Ferriscope ▾** menu holds appearance settings and the desktop release ch
 <details>
 <summary>Build the latest desktop version from source</summary>
 
-Install [rustup](https://rustup.rs/), [GitHub CLI](https://cli.github.com/), and the [Dioxus desktop build dependencies for your OS](https://dioxuslabs.com/learn/0.7/getting_started/). On macOS, install Xcode Command Line Tools (`xcode-select --install`); on Linux, install the GTK 3 and WebKitGTK 4.1 development libraries.
+Install [rustup](https://rustup.rs/), [GitHub CLI](https://cli.github.com/), and the [Dioxus desktop build dependencies for your OS](https://dioxuslabs.com/learn/0.7/getting_started/). On macOS, install Xcode Command Line Tools (`xcode-select --install`); on Linux, install the GTK 3, WebKitGTK 4.1, and libxdo development files (on Arch, `gtk3`, `webkit2gtk-4.1`, and `xdotool`).
 
 ```sh
 rustup toolchain install 1.100.0

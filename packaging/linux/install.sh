@@ -2,6 +2,18 @@
 # Install the binary next to this script, never download or compile anything.
 set -eu
 cd "$(dirname "$0")"
+
+# ldd can exit successfully even when the loader cannot resolve a library.
+if ! libraries=$(LC_ALL=C ldd ./ferriscope 2>&1); then
+    printf 'Ferriscope was not installed. Could not check runtime libraries:\n%s\n' "$libraries" >&2
+    exit 1
+fi
+if missing=$(printf '%s\n' "$libraries" | grep -E '=> not found[[:space:]]*$|: version .* not found'); then
+    printf 'Ferriscope was not installed. Missing or incompatible runtime libraries:\n%s\n' "$missing" >&2
+    printf 'See INSTALL.txt for requirements, or use a build for your Linux distribution.\n' >&2
+    exit 1
+fi
+
 bin="$HOME/.local/bin"
 apps="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 icons="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps"

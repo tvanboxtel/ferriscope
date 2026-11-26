@@ -2,6 +2,8 @@ mod comments;
 mod diff;
 #[cfg(not(target_arch = "wasm32"))]
 mod gh;
+#[cfg(feature = "desktop")]
+mod inbox;
 mod platform;
 #[cfg(not(target_arch = "wasm32"))]
 mod preview;
@@ -33,9 +35,16 @@ fn App() -> Element {
     let mut busy = use_signal(|| false);
     let mut error = use_signal(String::new);
     let mut session = use_signal(|| None::<(platform::Snapshot, Review)>);
+    let mut show_reader = use_signal(|| false);
     let mut revision = use_signal(|| 0usize);
     let mut recents = use_signal(platform::load_recents);
     let mut show_recents = use_signal(|| false);
+    #[cfg(feature = "desktop")]
+    use_effect(move || {
+        if show_reader() {
+            focus_reader();
+        }
+    });
     let open = use_callback(move |input: String| {
         if busy() {
             return;
@@ -79,6 +88,7 @@ fn App() -> Element {
                     }
                     recents.set(list);
                     session.set(Some(s));
+                    show_reader.set(true);
                     revision += 1
                 }
                 Err(e) => error.set(e),
@@ -91,6 +101,12 @@ fn App() -> Element {
         style { {include_str!("style.css")} }
         div {class:"workspace", "data-theme":"{theme}",
         header {Appearance {theme,error} small {"PR READER"}
+            if cfg!(feature = "desktop") && session.read().is_some() {
+                button {disabled:busy(),onclick:move |_|{
+                    show_recents.set(false);
+                    show_reader.toggle();
+                },if show_reader() {"Home"} else {"Back to reader"}}
+            }
             form {onsubmit:move |event|{event.prevent_default();let input=url();open.call(input)},
                 input {aria_label:"GitHub PR URL",placeholder:"https://github.com/owner/repo/pull/123",value:"{url}",oninput:move|e|url.set(e.value())}
                 button {disabled:busy(), if busy() {"Loading…"} else {"Open / refresh"}}
@@ -110,8 +126,28 @@ fn App() -> Element {
         }
         if !error.read().is_empty(){p {role:"alert","{error}"}}
         if let Some((snapshot,review))=session.read().as_ref(){
-            Reader {key:"{revision}",pr:snapshot.key.clone(),head:snapshot.head().to_owned(), files:snapshot.files.clone(),initial:review.clone(),dark:theme.read().as_str()!="light"}
-        }else{section {class:"intro",small {"PERSONAL REVIEW WORKSPACE"} h1 {"Read changes by purpose."} p {"Paste a pull request above to explore its files, bring related changes together, and keep track of what you’ve reviewed."}}}
+            // Keep the reader mounted while visiting the inbox so navigation
+            // and in-progress review input aren't reset by the trip home.
+            div {hidden:!show_reader(),
+                Reader {key:"{revision}",pr:snapshot.key.clone(),head:snapshot.head().to_owned(), files:snapshot.files.clone(),initial:review.clone(),dark:theme.read().as_str()!="light"}
+            }
+        }
+        if !show_reader(){
+            {home(open,busy())}
+        }
+        }
+    }
+}
+
+fn home(_open: Callback<String>, _busy: bool) -> Element {
+    #[cfg(feature = "desktop")]
+    return rsx! { inbox::YourPrs {open:_open,busy:_busy} };
+    #[cfg(not(feature = "desktop"))]
+    rsx! {
+        section {class:"intro",
+            small {"PERSONAL REVIEW WORKSPACE"}
+            h1 {"Read changes by purpose."}
+            p {"Paste a pull request above to explore its files, bring related changes together, and keep track of what you’ve reviewed."}
         }
     }
 }

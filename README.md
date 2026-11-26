@@ -4,14 +4,14 @@
 
 ## TL;DR — install and open a PR
 
-**No Rust or source checkout needed.** Pick your [v0.1.3 download](https://github.com/tvanboxtel/ferriscope/releases/tag/v0.1.3):
+**No Rust or source checkout needed.** Pick your [v0.1.4 download](https://github.com/tvanboxtel/ferriscope/releases/tag/v0.1.4):
 
 | Your computer | Download | Install |
 | --- | --- | --- |
-| **Mac with Apple Silicon** (M-series) | [Ferriscope for Mac (.zip)](https://github.com/tvanboxtel/ferriscope/releases/download/v0.1.3/Ferriscope-macOS-arm64.zip) | Unzip, drag **Ferriscope.app** into **Applications**, then open it. |
-| **Linux x86-64** | [Ferriscope for Linux (.tar.gz)](https://github.com/tvanboxtel/ferriscope/releases/download/v0.1.3/ferriscope-0.1.3-linux-x86_64.tar.gz) | Check the runtime requirements below, extract, and run `sh install.sh` inside the extracted folder. Then open **Ferriscope** from the applications menu. |
+| **Mac with Apple Silicon** (M-series) | [Ferriscope for Mac (.zip)](https://github.com/tvanboxtel/ferriscope/releases/download/v0.1.4/Ferriscope-macOS-arm64.zip) | Unzip, drag **Ferriscope.app** into **Applications**, then open it. |
+| **Linux x86-64** | [Ferriscope for Linux (.tar.gz)](https://github.com/tvanboxtel/ferriscope/releases/download/v0.1.4/ferriscope-0.1.4-linux-x86_64.tar.gz) | Check the runtime requirements below, extract, and run `sh install.sh` inside the extracted folder. Then open **Ferriscope** from the applications menu. |
 
-**First launch:** Ferriscope uses your [GitHub CLI](https://cli.github.com/) login. If you haven’t signed in, run `gh auth login --hostname github.com` in a terminal. Then paste a PR URL **in the Ferriscope window** and click **Open / refresh**. Press **J** to start reading.
+**First launch:** Ferriscope uses your [GitHub CLI](https://cli.github.com/) login. If you haven’t signed in, run `gh auth login --hostname github.com` in a terminal. Pick a PR from **Your PRs** or paste a PR URL and click **Open / refresh**. Press **J** to start reading.
 
 <details>
 <summary>Mac won’t open the app?</summary>
@@ -23,14 +23,14 @@ This build is ad-hoc signed, **not Apple notarized**. Gatekeeper may block it. I
 <details>
 <summary>Linux: copy-paste install, requirements, and updates</summary>
 
-The archive needs compatible GTK 3 and WebKitGTK 4.1 runtime libraries. It includes libxdo, so you don't need to install `xdotool`. If you downloaded v0.1.3 before this fix and see a `libxdo.so.3` error, download it again.
+The archive needs compatible GTK 3 and WebKitGTK 4.1 runtime libraries. It includes libxdo, so you don't need to install `xdotool`. If an older download fails with a `libxdo.so.3` error, install the current archive below.
 
 Run from any directory:
 
 ```sh
-curl -fLO https://github.com/tvanboxtel/ferriscope/releases/download/v0.1.3/ferriscope-0.1.3-linux-x86_64.tar.gz &&
-tar -xzf ferriscope-0.1.3-linux-x86_64.tar.gz &&
-sh ferriscope-0.1.3-linux-x86_64/install.sh
+curl -fLO https://github.com/tvanboxtel/ferriscope/releases/download/v0.1.4/ferriscope-0.1.4-linux-x86_64.tar.gz &&
+tar -xzf ferriscope-0.1.4-linux-x86_64.tar.gz &&
+sh ferriscope-0.1.4-linux-x86_64/install.sh
 ```
 
 The installer registers the launcher and icon and places the executable at `~/.local/bin/ferriscope` without `sudo`. To update, close the app and install a compatible [release](https://github.com/tvanboxtel/ferriscope/releases/latest) the same way; saved reviews stay on disk. [Uninstall instructions](packaging/linux/INSTALL.txt).
@@ -39,6 +39,7 @@ The installer registers the launcher and icon and places the executable at `~/.l
 
 ## Your first review
 
+- **See what’s waiting:** The desktop **Your PRs** inbox shows open pull requests that directly request your review, followed by other open PRs assigned to you. A PR can have both labels. Click **Home** in the reader to see the inbox, then **Back to reader** to pick up where you left off.
 - **Find a file:** press `/` to search every changed path, including collapsed groups. **Enter** opens the first match; **Esc** returns to the tree.
 - **Read related changes together:** select files with their checkboxes, name the group, and click **Review together**. Use the arrows to reorder. **Ungroup** removes a custom group and returns its files to their default groups without losing review progress.
 - **Keep your place:** **J / K** move forward and back; **Space** marks the current file reviewed or unread. **Recent PRs** reopens work on this device. After a push, only reviewed files whose diff changed need another look.

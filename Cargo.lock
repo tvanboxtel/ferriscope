@@ -1809,6 +1809,7 @@ dependencies = [
  "gloo-net",
  "gloo-timers",
  "pulldown-cmark",
+ "rfd",
  "semver",
  "serde",
  "serde_json",

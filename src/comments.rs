@@ -303,8 +303,10 @@ esac"#).unwrap();
                         crate::preview::Editor {label:match outcome(){Outcome::Changes=>"What needs to change? (required)",Outcome::Approve=>"Approval note (optional)",Outcome::Comment if notes.is_empty()=>"Write a comment",Outcome::Comment=>"Summary (optional)"},body:summary,dark,disabled:busy()}
                         div {class:"review-confirm",
                         button {class:"publish-review",disabled:busy()||stale||loaded.is_err()||outcome().validate(!notes.is_empty(),has_summary()).is_err(),onclick:move |_|{
-                            if busy(){return} busy.set(true);let pr=pr.clone();let mut d=draft();if d.notes.is_empty(){d.head=head.clone()}let verdict=outcome();let body=summary();
-                            spawn(async move{match publish_with(std::ffi::OsStr::new("gh"),&pr,&d,verdict,&body).await{
+                            if busy(){return}
+                            let gh=match crate::gh::executable(){Ok(gh)=>gh,Err(e)=>{message.set(e);return}};
+                            busy.set(true);let pr=pr.clone();let mut d=draft();if d.notes.is_empty(){d.head=head.clone()}let verdict=outcome();let body=summary();
+                            spawn(async move{match publish_with(&gh,&pr,&d,verdict,&body).await{
                                 Ok(())=>{summary.set(String::new());outcome.set(Outcome::Comment);open.set(false);if persist.call(Draft::default()){message.set("Review posted to GitHub.".into())}else{draft.set(Draft::default());message.set("Review posted, but the local draft could not be cleared. Do not resubmit it.".into())}},
                                 Err(e)=>message.set(e)
                             }busy.set(false);});

@@ -20,7 +20,7 @@ async fn request(path: &str) -> Result<String, String> {
 
 #[cfg(not(target_arch = "wasm32"))]
 async fn request(path: &str) -> Result<String, String> {
-    let r = async_process::Command::new("gh")
+    let r = async_process::Command::new(crate::gh::executable()?)
         .args(["api", "--hostname", "github.com", path])
         .output()
         .await

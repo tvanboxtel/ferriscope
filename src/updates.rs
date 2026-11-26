@@ -38,7 +38,7 @@ mod desktop {
     }
 
     async fn check() -> Result<Check, String> {
-        let output = async_process::Command::new("gh")
+        let output = async_process::Command::new(crate::gh::executable()?)
             .args([
                 "api",
                 "--hostname",

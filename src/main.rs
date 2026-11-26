@@ -1,5 +1,7 @@
 mod comments;
 mod diff;
+#[cfg(not(target_arch = "wasm32"))]
+mod gh;
 mod platform;
 #[cfg(not(target_arch = "wasm32"))]
 mod preview;

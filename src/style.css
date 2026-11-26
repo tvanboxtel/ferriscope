@@ -102,6 +102,25 @@ aside section { border-bottom: 1px solid var(--line); }
 .folder ~ .row { padding-left:.65rem; }
 .line-comment { font:inherit; font-size:.72rem; color:var(--muted); margin-right:.7rem; padding:.08rem .35rem; min-width:4em; text-align:right; }
 .comment-target { box-shadow: inset 3px 0 var(--teal); }
+.guided { display: grid; gap: .9rem; padding: clamp(1rem, 3vw, 2rem); margin-bottom: .8rem; background: var(--panel); border: 1px solid var(--line); border-radius: 1rem; overflow-wrap: anywhere; }
+.guided h1, .guided p { margin: 0; }
+.guided-meta, .guided-notice { color: var(--muted); font-size: .85rem; }
+.guided details { border-block: 1px solid var(--line); padding-block: .7rem; }
+.guided summary { cursor: pointer; }
+.guided textarea { display: block; width: 100%; margin-top: .4rem; padding: .6rem; font: inherit; color: var(--ink); background: var(--page); border: 1px solid var(--line); border-radius: .5rem; }
+.guided button { justify-self: start; }
+.guided .generate { background: var(--teal); color: var(--panel); font-weight: 650; }
+.guided-stages { list-style: none; margin: 0; padding: 0; }
+.guided-stages li { display: flex; align-items: center; gap: .6rem; padding: .4rem 0; color: var(--muted); }
+.guided-stages span { display: grid; place-items: center; width: 1.6rem; height: 1.6rem; border-radius: 50%; background: var(--subtle); }
+.guided-stages .active { color: var(--teal); font-weight: 650; }
+.guided progress { width: 100%; height: .4rem; accent-color: var(--teal); }
+.guided pre { max-height: 12rem; white-space: pre-wrap; }
+.tour-row { display: flex; gap: .45rem; align-items: baseline; }
+.tour-number, .tour-line { color: var(--muted); font-size: .76rem; white-space: nowrap; }
+.tour-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tour-explanation { margin: .35rem 0; font-size: .9rem; }
+.guided-target { outline: 2px solid var(--teal); outline-offset: -2px; }
 .comment-target .line-comment:disabled { opacity: 1; color: var(--teal); border-color: var(--teal); }
 .review-tray { display: flex; flex-direction: column; overflow: auto; max-height: 44dvh; border-top: 1px solid var(--line); background: var(--panel); }
 .review-tray:has(.drafts) { height: min(44dvh, 22rem); }

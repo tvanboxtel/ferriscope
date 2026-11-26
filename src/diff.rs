@@ -185,20 +185,29 @@ pub fn Diff(
     dark: bool,
     oncomment: EventHandler<crate::comments::Anchor>,
     anchor: Option<crate::comments::Anchor>,
+    guided: Option<(usize, u64)>,
 ) -> Element {
     let mut limit = use_signal(|| BATCH);
+    let visible = limit().max(guided.map_or(0, |(r, _)| r + 1));
+    use_effect(use_reactive!(|(guided)| {
+        if guided.is_some() {
+            document::eval(
+                "requestAnimationFrame(() => document.querySelector('.guided-target')?.scrollIntoView({block:'center',inline:'nearest'}))",
+            );
+        }
+    }));
     let cache = use_context::<Rc<RefCell<HighlightCache>>>();
-    let page = cache.borrow_mut().page(&path, &patch, dark, limit());
+    let page = cache.borrow_mut().page(&path, &patch, dark, visible);
     let mut offset = 0;
     let mut rows = Vec::with_capacity(page.rows.len());
-    for row in &page.rows {
+    for (idx, row) in page.rows.iter().enumerate() {
         let line = &patch[offset..offset + row.len];
         offset += row.len;
         let mut tokens = line.get(1..).unwrap_or("");
         let target = anchor
             .as_ref()
             .is_some_and(|a| a.path == path && row.coord == Some((a.side.as_str(), a.line)));
-        rows.push(rsx! { div { class:"{row.class}",class:if target {"comment-target"},
+        rows.push(rsx! { div { class:"{row.class}",class:if target {"comment-target"}, class:if guided.is_some_and(|(r,_)|r==idx) {"guided-target"},
             if cfg!(not(target_arch="wasm32")) {
                 if let Some((side,n))=row.coord{
                     button {class:"line-comment",disabled:anchor.is_some(),title:format!("Draft a comment · {}",crate::comments::line_label(side,n)),onkeydown:crate::keep_native_space,
@@ -216,7 +225,7 @@ pub fn Diff(
     }
     rsx! { pre { for row in rows { {row} } }
         if page.more{
-            button {onclick:move |_|limit+=BATCH,"Show more lines"}
+            button {onclick:move |_|limit.set(visible+BATCH),"Show more lines"}
         }
     }
 }

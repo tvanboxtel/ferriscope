@@ -22,6 +22,7 @@ async fn request(path: &str) -> Result<String, String> {
 async fn request(path: &str) -> Result<String, String> {
     let r = async_process::Command::new(crate::gh::executable()?)
         .args(["api", "--hostname", "github.com", path])
+        .kill_on_drop(true)
         .output()
         .await
         .map_err(|e| format!("Cannot run gh: {e}"))?;
@@ -40,6 +41,15 @@ struct Meta {
     head: Ref,
     base: Ref,
     changed_files: usize,
+}
+#[cfg(feature = "desktop")]
+pub(crate) async fn verify_head(key: &str, expected: &str) -> Result<(), String> {
+    let api = format!("repos/{}", key.replace("/pull/", "/pulls/"));
+    let meta: Meta = serde_json::from_str(&request(&api).await?).map_err(|e| e.to_string())?;
+    if meta.head.sha != expected {
+        return Err("The PR head changed. Refresh the PR before generating a walkthrough.".into());
+    }
+    Ok(())
 }
 #[derive(Clone)]
 pub struct Snapshot {

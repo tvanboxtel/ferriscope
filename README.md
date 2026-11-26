@@ -39,6 +39,10 @@ The installer registers the launcher and icon and places the executable at `~/.l
 
 ## Your first review
 
+**Guided review (desktop, development build):** Select a PR from the inbox or recents, or paste its URL. Before the reader opens, choose **Raw review**, **Follow the data flow**, or **Custom walkthrough**. Guided views ask for confirmation via **Generate** before launching Codex. Ferriscope stages the changed-file manifest and available GitHub patches in a temporary folder for Codex to read on demand; no checkout is needed. **Prompt sent to Codex** shows the instructions, not an inline copy of the patches. For questions that need unchanged code, enable **Include local repo context** and choose a trusted, clean checkout whose `origin` and `HEAD` match the PR. A remembered folder is used only when you opt in.
+
+Generation requires your installed `codex` CLI and its existing login. It sends repository context to your configured provider and may use your account’s quota. Ferriscope requests a read-only shell; your local Codex integrations may start and have permissions beyond that shell. Raw review does not invoke Codex. The **Walkthrough** file group lists stops in order. Use the reader’s **Previous / Next** buttons or **K / J** to follow them. Select a file outside the group to resume normal file navigation without changing review marks or drafts. Routes are in-memory and discarded when you refresh or reopen a PR.
+
 - **See what’s waiting:** The desktop **Your PRs** inbox shows open pull requests that directly request your review, followed by other open PRs assigned to you. A PR can have both labels. Click **Home** in the reader to see the inbox, then **Back to reader** to pick up where you left off.
 - **Find a file:** press `/` to search every changed path, including collapsed groups. **Enter** opens the first match; **Esc** returns to the tree.
 - **Read related changes together:** select files with their checkboxes, name the group, and click **Review together**. Use the arrows to reorder. **Ungroup** removes a custom group and returns its files to their default groups without losing review progress.

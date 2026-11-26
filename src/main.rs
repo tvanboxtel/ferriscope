@@ -3,6 +3,8 @@ mod diff;
 #[cfg(not(target_arch = "wasm32"))]
 mod gh;
 #[cfg(feature = "desktop")]
+mod guided;
+#[cfg(feature = "desktop")]
 mod inbox;
 mod platform;
 #[cfg(not(target_arch = "wasm32"))]
@@ -28,6 +30,18 @@ fn main() {
     dioxus::launch(App)
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum ReviewMode {
+    Raw,
+    Flow,
+    Custom,
+}
+
+#[cfg(feature = "desktop")]
+type Route = Rc<Vec<guided::Located>>;
+#[cfg(not(feature = "desktop"))]
+type Route = ();
+
 #[component]
 fn App() -> Element {
     let theme = use_signal(platform::load_theme);
@@ -36,6 +50,13 @@ fn App() -> Element {
     let mut error = use_signal(String::new);
     let mut session = use_signal(|| None::<(platform::Snapshot, Review)>);
     let mut show_reader = use_signal(|| false);
+    let mut pending = use_signal(|| None::<String>);
+    let mut ready = use_signal(|| None::<platform::Snapshot>);
+    let mut requested = use_signal(|| None::<ReviewMode>);
+    let mut preparing = use_signal(|| None::<ReviewMode>);
+    let mut route = use_signal(|| None::<Route>);
+    let mut fetch_task = use_signal(|| None::<dioxus::dioxus_core::Task>);
+    let mut mode = use_signal(|| ReviewMode::Raw);
     let mut revision = use_signal(|| 0usize);
     let mut recents = use_signal(platform::load_recents);
     let mut show_recents = use_signal(|| false);
@@ -45,19 +66,59 @@ fn App() -> Element {
             focus_reader();
         }
     });
-    let open = use_callback(move |input: String| {
+    // Only entering a mode should persist review state or add a recent PR.
+    let enter = use_callback(
+        move |(snapshot, selected, stops): (platform::Snapshot, ReviewMode, Option<Route>)| {
+            let key = &snapshot.key;
+            let review = platform::load(key).and_then(|mut review| {
+                review.reconcile(&snapshot.files);
+                platform::save(key, &review)?;
+                Ok(review)
+            });
+            let review = match review {
+                Ok(review) => review,
+                Err(e) => {
+                    error.set(e);
+                    return;
+                }
+            };
+            let mut list = recents();
+            list.retain(|entry| entry != key);
+            list.insert(0, key.clone());
+            list.truncate(10);
+            if let Err(e) = platform::save_recents(&list) {
+                error.set(format!("Could not save recent PRs: {e}"))
+            }
+            recents.set(list);
+            session.set(Some((snapshot, review)));
+            mode.set(selected);
+            route.set(stops);
+            preparing.set(None);
+            ready.set(None);
+            pending.set(None);
+            show_reader.set(true);
+            revision += 1;
+        },
+    );
+    let choose = use_callback(
+        move |(snapshot, choice): (platform::Snapshot, ReviewMode)| {
+            if choice == ReviewMode::Raw {
+                enter.call((snapshot, choice, None));
+            } else {
+                pending.set(Some(snapshot.key.clone()));
+                ready.set(Some(snapshot));
+                preparing.set(Some(choice));
+            }
+        },
+    );
+    let load = use_callback(move |(key, selected): (String, Option<ReviewMode>)| {
         if busy() {
             return;
         }
-        let key = match pr_key(&input) {
-            Ok(k) => k,
-            Err(e) => {
-                error.set(e);
-                return;
-            }
-        };
         busy.set(true);
-        url.set(input);
+        ready.set(None);
+        requested.set(selected);
+        url.set(format!("https://github.com/{key}"));
         show_recents.set(false);
         error.set(String::new());
         let cached = session
@@ -65,49 +126,56 @@ fn App() -> Element {
             .as_ref()
             .map(|(snapshot, _)| snapshot.clone());
         let dark = theme.peek().as_str() != "light";
-        spawn(async move {
-            let result = async {
-                let snapshot = platform::fetch(&key, cached, async |files| {
-                    diff::prepare_first(files, dark).await
-                })
-                .await?;
-                let mut review = platform::load(&key)?;
-                review.reconcile(&snapshot.files);
-                platform::save(&key, &review)?;
-                Ok::<_, String>((snapshot, review))
-            }
+        fetch_task.set(Some(spawn(async move {
+            let result = platform::fetch(&key, cached, async |files| {
+                diff::prepare_first(files, dark).await
+            })
             .await;
-            match result {
-                Ok(s) => {
-                    let mut list = recents();
-                    list.retain(|key| key != &s.0.key);
-                    list.insert(0, s.0.key.clone());
-                    list.truncate(10);
-                    if let Err(e) = platform::save_recents(&list) {
-                        error.set(format!("Could not save recent PRs: {e}"))
-                    }
-                    recents.set(list);
-                    session.set(Some(s));
-                    show_reader.set(true);
-                    revision += 1
-                }
-                Err(e) => error.set(e),
-            }
             busy.set(false);
-        });
+            fetch_task.set(None);
+            match result {
+                Ok(snapshot) => match requested.take() {
+                    Some(choice) => choose.call((snapshot, choice)),
+                    None => ready.set(Some(snapshot)),
+                },
+                Err(e) => {
+                    requested.set(None);
+                    error.set(e);
+                }
+            }
+        })));
+    });
+    let open = use_callback(move |input: String| {
+        if busy() {
+            return;
+        }
+        match pr_key(&input) {
+            Ok(key) if cfg!(feature = "desktop") => {
+                preparing.set(None);
+                pending.set(Some(key.clone()));
+                load.call((key, None));
+            }
+            Ok(key) => load.call((key, Some(ReviewMode::Raw))),
+            Err(e) => error.set(e),
+        }
     });
     rsx! {
         document::Title {"Ferriscope · PR reader"}
         style { {include_str!("style.css")} }
         div {class:"workspace", "data-theme":"{theme}",
         header {Appearance {theme,error} small {"PR READER"}
-            if cfg!(feature = "desktop") && session.read().is_some() {
+            if cfg!(feature = "desktop") && pending.read().is_none() && session.read().is_some() {
                 button {disabled:busy(),onclick:move |_|{
                     show_recents.set(false);
                     show_reader.toggle();
                 },if show_reader() {"Home"} else {"Back to reader"}}
             }
-            form {onsubmit:move |event|{event.prevent_default();let input=url();open.call(input)},
+            form {onsubmit:move |event|{event.prevent_default();let input=url();
+                if show_reader() && pending.read().is_none() && let Ok(key)=pr_key(&input)
+                    && session.peek().as_ref().is_some_and(|(s,_)|s.key==key) {
+                    load.call((key,Some(mode())));
+                } else {open.call(input)}
+            },
                 input {aria_label:"GitHub PR URL",placeholder:"https://github.com/owner/repo/pull/123",value:"{url}",oninput:move|e|url.set(e.value())}
                 button {disabled:busy(), if busy() {"Loading…"} else {"Open / refresh"}}
             }
@@ -125,14 +193,51 @@ fn App() -> Element {
             }
         }
         if !error.read().is_empty(){p {role:"alert","{error}"}}
-        if let Some((snapshot,review))=session.read().as_ref(){
+        for (snapshot,review) in session.read().iter(){
             // Keep the reader mounted while visiting the inbox so navigation
             // and in-progress review input aren't reset by the trip home.
-            div {hidden:!show_reader(),
-                Reader {key:"{revision}",pr:snapshot.key.clone(),head:snapshot.head().to_owned(), files:snapshot.files.clone(),initial:review.clone(),dark:theme.read().as_str()!="light"}
+            div {key:"{revision}",hidden:!show_reader() || pending.read().is_some(),
+                Reader {route:route(),pr:snapshot.key.clone(),head:snapshot.head().to_owned(), files:snapshot.files.clone(),initial:review.clone(),dark:theme.read().as_str()!="light"}
             }
         }
-        if !show_reader(){
+        if let Some(key)=pending(){
+            section {class:"inbox",aria_label:"Choose review mode",
+                if let Some(choice)=preparing() {
+                    {ready.read().as_ref().map(|s|{
+                        #[cfg(feature="desktop")]
+                        {rsx!{guided::Prepare {key:"{key}",pr:key.clone(),head:s.head().to_owned(),files:s.files.clone(),custom:choice==ReviewMode::Custom,
+                            finished:move |stops|{let snapshot=ready.peek().clone();if let Some(snapshot)=snapshot {enter.call((snapshot,choice,Some(stops)));}}
+                        }}}
+                        #[cfg(not(feature="desktop"))]
+                        {let _=(s,choice);rsx!{}}
+                    })}
+                    button {onclick:move |_|{preparing.set(None);error.set(String::new());},"Back to review modes"}
+                } else {
+                h1 {"How do you want to review this PR?"}
+                p {"{key}"}
+                div {class:"inbox-list",
+                    for (choice,title,description) in [
+                        (ReviewMode::Raw,"Raw review","Read and organize the diff yourself."),
+                        (ReviewMode::Flow,"Follow the data flow","Walk through a behavior with Codex."),
+                        (ReviewMode::Custom,"Custom walkthrough","Guide Codex with your own question."),
+                    ]{
+                        button {disabled:requested.read().is_some(),onclick:{let key=key.clone();move |_|{
+                            if let Some(snapshot)=ready.take() { choose.call((snapshot,choice)); }
+                            else if busy() {requested.set(Some(choice));}
+                            else {load.call((key.clone(),Some(choice)));}
+                        }},
+                            strong {"{title}"} span {"{description}"}
+                        }
+                    }
+                }
+                if busy(){p {role:"status",if requested.read().is_some() {"Opening review…"} else {"Loading PR while you choose…"}}}
+                button {onclick:move |_|{
+                    if let Some(t)=fetch_task.take(){t.cancel();}
+                    busy.set(false); ready.set(None); preparing.set(None); requested.set(None); pending.set(None); error.set(String::new());
+                },"Cancel"}
+                }
+            }
+        }else if !show_reader(){
             {home(open,busy())}
         }
         }
@@ -180,7 +285,14 @@ fn Appearance(mut theme: Signal<String>, mut error: Signal<String>) -> Element {
 }
 
 #[component]
-fn Reader(pr: String, head: String, files: Rc<Vec<File>>, initial: Review, dark: bool) -> Element {
+fn Reader(
+    pr: String,
+    head: String,
+    files: Rc<Vec<File>>,
+    initial: Review,
+    dark: bool,
+    route: Option<Route>,
+) -> Element {
     use_context_provider(|| Rc::new(std::cell::RefCell::new(diff::HighlightCache::default())));
     let mut state = use_signal(|| initial.clone());
     let index = use_hook(|| {
@@ -209,6 +321,8 @@ fn Reader(pr: String, head: String, files: Rc<Vec<File>>, initial: Review, dark:
         )
     });
     let mut anchor = use_signal(|| None::<comments::Anchor>);
+    let mut current_stop = use_signal(|| None::<usize>);
+    let mut guided_line = use_signal(|| None::<(usize, usize, u64)>);
     use_effect(move || {
         let _ = active();
         document::eval(
@@ -284,8 +398,9 @@ fn Reader(pr: String, head: String, files: Rc<Vec<File>>, initial: Review, dark:
     let pos = ordered.iter().position(|&(_, _, i)| Some(i) == active());
     let previous = pos.and_then(|p| p.checked_sub(1));
     let next = Some(pos.map_or(0, |p| p + 1)).filter(|&p| p < ordered.len());
-    let jump = use_callback(move |p: usize| {
-        let (g, fi, i) = ordered[p];
+    let jump = use_callback(move |(g, fi, i): (usize, usize, usize)| {
+        current_stop.set(None);
+        guided_line.set(None);
         let review = state.read();
         let group = &review.groups[g];
         expanded.write().insert(group.name.clone());
@@ -300,9 +415,83 @@ fn Reader(pr: String, head: String, files: Rc<Vec<File>>, initial: Review, dark:
         active.set(Some(i));
         focus_reader();
     });
+    let at_position = {
+        let ordered = ordered.clone();
+        use_callback(move |p: usize| jump.call(ordered[p]))
+    };
+    let (guided_panel, explanation, counter, previous, next, navigate) = {
+        #[cfg(feature = "desktop")]
+        {
+            let mut sequence = use_signal(|| 0u64);
+            let visit = use_callback({
+                let route = route.clone();
+                move |n: usize| {
+                    if let Some((i, row)) = route
+                        .as_ref()
+                        .and_then(|r| r.get(n))
+                        .and_then(|s| s.location.ok())
+                    {
+                        query.set(String::new());
+                        active.set(Some(i));
+                        current_stop.set(Some(n));
+                        let ticket = *sequence.peek() + 1;
+                        sequence.set(ticket);
+                        guided_line.set(Some((i, row, ticket)));
+                        focus_reader();
+                    }
+                }
+            });
+            let first = route
+                .as_ref()
+                .and_then(|r| r.iter().position(|s| s.location.is_ok()));
+            use_effect(move || {
+                if let Some(n) = first {
+                    visit.call(n)
+                }
+            });
+            let current = current_stop();
+            let navigate = use_callback(move |n| {
+                if current.is_some() {
+                    visit.call(n)
+                } else {
+                    at_position.call(n)
+                }
+            });
+            if let Some(r) = route.as_ref() {
+                let group = rsx! {guided::Group {route:r.clone(),current,visit}};
+                if let Some(i) = current {
+                    let prev = (0..i).rev().find(|&n| r[n].location.is_ok());
+                    let next = (i + 1..r.len()).find(|&n| r[n].location.is_ok());
+                    (
+                        group,
+                        Some(r[i].explanation().to_owned()),
+                        Some(format!("Stop {} of {}", i + 1, r.len())),
+                        prev,
+                        next,
+                        navigate,
+                    )
+                } else {
+                    (group, None, None, previous, next, navigate)
+                }
+            } else {
+                (rsx! {}, None, None, previous, next, navigate)
+            }
+        }
+        #[cfg(not(feature = "desktop"))]
+        {
+            (
+                rsx! {},
+                None::<String>,
+                None::<String>,
+                previous,
+                next,
+                at_position,
+            )
+        }
+    };
     let choose = use_callback(move |p: usize| {
         query.set(String::new());
-        jump.call(p)
+        at_position.call(p)
     });
     let file = active().and_then(|i| files.get(i));
     rsx! {
@@ -313,7 +502,7 @@ fn Reader(pr: String, head: String, files: Rc<Vec<File>>, initial: Review, dark:
                 if e.key()==Key::Character("/".into()){e.prevent_default();document::eval("document.getElementById('file-search')?.focus()");return}
                 if e.key()==Key::Character(" ".into()) && active().is_some(){e.prevent_default();if !e.is_auto_repeating(){toggle.call(())}return}
                 let dest=match e.key(){Key::Character(k) if k=="j"=>next,Key::Character(k) if k=="k"=>previous,_=>return};
-                if let Some(p)=dest{e.prevent_default();jump.call(p)}
+                if let Some(p)=dest{e.prevent_default();navigate.call(p)}
             },
             aside {onkeydown:keep_native_space,
                 small {"PULL REQUEST"} h3 {"{pr}"} p {"{files.len()} changed files"}
@@ -352,6 +541,7 @@ fn Reader(pr: String, head: String, files: Rc<Vec<File>>, initial: Review, dark:
                     },"Review together ({selected.read().len()})"}
                 }}
                 if !error.read().is_empty(){p {role:"alert","{error}"}}
+                {guided_panel}
                 for (gi,g) in groups.iter().enumerate(){
                     section {key:"{g.name}",
                         div {class:"row heading",
@@ -389,7 +579,7 @@ fn Reader(pr: String, head: String, files: Rc<Vec<File>>, initial: Review, dark:
                                         input {r#type:"checkbox",aria_label:"Select {path}",checked:selected.read().contains(path),onchange:{
                                             let p=path.clone();move |_|{let mut set=selected.write();if !set.remove(&p){set.insert(p.clone());}}
                                         }}
-                                        button {class:"label",aria_label:file_row_label(&files[idx]),title:"{path}",onclick:move |_|{active.set(Some(idx));focus_reader();},
+                                        button {class:"label",aria_label:file_row_label(&files[idx]),title:"{path}",onclick:move |_|{current_stop.set(None);guided_line.set(None);active.set(Some(idx));focus_reader();},
                                             if g.custom {"{path}"}else{"{path.rsplit('/').next().unwrap_or(path)}"}
                                             span {class:"file-meta",
                                                 span {class:"badge","{kind(path)} · {state.read().status(&files[idx])}"}
@@ -413,13 +603,14 @@ fn Reader(pr: String, head: String, files: Rc<Vec<File>>, initial: Review, dark:
             article {class:"reader",
                 div {class:"reader-top",
                     nav {class:"file-nav",aria_label:"File navigation",onkeydown:keep_native_space,
-                        span { if let Some(p)=pos {"File {p+1} of {files.len()}"} else {"{files.len()} files"} }
-                        button {disabled:previous.is_none(),onclick:move |_|if let Some(p)=previous{jump.call(p)}, "Previous " kbd {"K"}}
-                        button {disabled:next.is_none(),onclick:move |_|if let Some(p)=next{jump.call(p)}, "Next " kbd {"J"}}
+                        span { if let Some(label)=counter {"{label}"} else if let Some(p)=pos {"File {p+1} of {files.len()}"} else {"{files.len()} files"} }
+                        button {disabled:previous.is_none(),onclick:move |_|if let Some(p)=previous{navigate.call(p)}, "Previous " kbd {"K"}}
+                        button {disabled:next.is_none(),onclick:move |_|if let Some(p)=next{navigate.call(p)}, "Next " kbd {"J"}}
                     }
                     if let Some(f)=file {
                         div {class:"file-heading",
                             small {"UNIFIED DIFF · {f.change_type()}"} h2 {"{f.filename}"}
+                            if let Some(why)=explanation {p {class:"tour-explanation","{why}"}}
                             div {class:"tools",onkeydown:keep_native_space,
                                 {line_counts(f)}
                                 a {href:"https://github.com/{pr}/files#diff-{hash(&f.filename)}",target:"_blank",rel:"noopener noreferrer","GitHub diff ↗"}
@@ -435,7 +626,7 @@ fn Reader(pr: String, head: String, files: Rc<Vec<File>>, initial: Review, dark:
                 div {class:"diff-scroll",
                     if let Some(f)=file {
                         if let Some(patch)=f.patch(){
-                            diff::Diff {key:"{f.filename}",path:f.filename.clone(),patch:patch.clone(),dark,oncomment:move |a|anchor.set(Some(a)),anchor:anchor()}
+                            diff::Diff {key:"{f.filename}",path:f.filename.clone(),patch:patch.clone(),dark,oncomment:move |a|anchor.set(Some(a)),anchor:anchor(),guided:guided_line().map(|(_,r,n)|(r,n))}
                         } else {p {"GitHub supplied no text patch for this file. Open the GitHub diff for details."}}
                     }else{div {class:"empty",span {class:"diff-icon",aria_hidden:"true","±"} small {"DIFF VIEWER"} h2 {"Choose a file to begin"} p {"Expand a group and select a file to read its changes."}}}
                 }

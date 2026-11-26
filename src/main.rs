@@ -1,9 +1,9 @@
 mod comments;
 mod diff;
 mod platform;
-mod updates;
 #[cfg(not(target_arch = "wasm32"))]
 mod preview;
+mod updates;
 use dioxus::prelude::*;
 use ferriscope::{File, Review, hash, kind, pr_key};
 use std::collections::{HashMap, HashSet};

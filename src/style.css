@@ -118,7 +118,8 @@ aside section { border-bottom: 1px solid var(--line); }
 .intro { max-width: 42rem; margin: 10vh auto; padding: clamp(2rem,6vw,5rem); }
 .intro h1 { font-size: clamp(2rem,4vw,3.5rem); }
 .empty { min-height: 100%; display: grid; align-content: center; justify-items: center; }
-.file-nav { display: flex; align-items: center; gap: .45rem; position: sticky; top: 0; z-index: 1; background: var(--panel); padding: .45rem 0; margin-bottom: 1rem; border-bottom: 1px solid var(--line); }
+.reader-dock { position:sticky; top:0; z-index:1; background:var(--panel); max-height:55dvh; overflow:auto; margin-bottom:1rem; border-bottom:1px solid var(--line); }
+.file-nav { display: flex; align-items: center; gap: .45rem; padding: .45rem 0; }
 .file-nav span { margin-right: auto; color: var(--muted); font-size: .82rem; }
 .file-nav button { font-size: .84rem; padding: .35rem .55rem; }
 kbd { font: .72rem monospace; padding: .1rem .28rem; background: var(--subtle); border-radius: .2rem; }
@@ -130,7 +131,7 @@ pre div { padding: 0 1rem; width: max-content; min-width: 100%; min-height: 1.65
 @media (max-width: 720px) {
   header { flex-wrap: wrap; } form { flex-basis: 100%; } form input { flex: 1; }
   main { grid-template-columns: minmax(0,1fr); padding: .65rem; gap: .65rem; }
-  aside,article { height: auto; } aside { max-height: 48vh; } .empty { min-height: 14rem; }
+  aside,article { height: auto; } aside { max-height: 48vh; } article { overflow:visible; } .empty { min-height: 14rem; }
   .intro { margin: 2rem .65rem; }
 }
 @media (prefers-reduced-motion: reduce) { .chevron { transition: none; } }

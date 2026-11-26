@@ -331,12 +331,14 @@ fn Reader(pr: String, head: String, files: Rc<Vec<File>>, initial: Review, dark:
                 }
             }
             article {
+                div {class:"reader-dock",
                 nav {class:"file-nav",aria_label:"File navigation",onkeydown:keep_native_space,
                     span { if let Some(p)=pos {"File {p+1} of {files.len()}"} else {"{files.len()} files"} }
                     button {disabled:previous.is_none(),onclick:move |_|if let Some(p)=previous{jump.call(p)}, "Previous " kbd {"K"}}
                     button {disabled:next.is_none(),onclick:move |_|if let Some(p)=next{jump.call(p)}, "Next " kbd {"J"}}
                 }
                 {draft_tray(pr.clone(),head,anchor,dark)}
+                }
                 if let Some(f)=active().and_then(|i|files.get(i)){
                     small {"UNIFIED DIFF · {f.change_type()}"} h2 {"{f.filename}"}
                     div {class:"tools",onkeydown:keep_native_space,

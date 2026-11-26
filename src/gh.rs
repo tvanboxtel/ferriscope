@@ -16,12 +16,50 @@ pub(crate) fn resolve(name: &str) -> Result<OsString, String> {
         let dirs = dirs
             .chain(["/opt/homebrew/bin", "/usr/local/bin"].map(PathBuf::from))
             .chain(dirs::home_dir().map(|home| home.join(".local/bin")));
-        find_in(name, dirs)
+        let path = std::path::Path::new(name);
+        let found = if path.is_absolute() {
+            is_executable(path).then(|| path.to_owned())
+        } else if path.components().count() > 1 {
+            return Err(format!(
+                "Use an absolute executable path instead of {name}."
+            ));
+        } else {
+            find_in(name, dirs)
+        };
+        found
             .map(PathBuf::into_os_string)
             .ok_or_else(|| format!("{name} not found on PATH or in standard install locations."))
     }
-    #[cfg(not(unix))]
-    Ok(name.into())
+    #[cfg(windows)]
+    {
+        use std::path::Path;
+        let path = Path::new(name);
+        let exe = match path.extension() {
+            Some(ext) if ext.eq_ignore_ascii_case("exe") => path.to_owned(),
+            None => path.with_extension("exe"),
+            _ => return Err("Choose a native .exe, not a shell script.".into()),
+        };
+        let found = if exe.is_absolute() {
+            exe.is_file().then_some(exe)
+        } else if exe.components().count() == 1 {
+            std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+                .filter(|dir| dir.is_absolute())
+                .map(|dir| dir.join(&exe))
+                .find(|p| p.is_file())
+        } else {
+            None
+        };
+        found
+            .map(|p| p.into_os_string())
+            .ok_or_else(|| format!("Executable {name} not found."))
+    }
+}
+
+#[cfg(unix)]
+fn is_executable(p: &std::path::Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    p.metadata()
+        .is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
 }
 
 #[cfg(unix)]
@@ -29,11 +67,7 @@ fn find_in(
     name: &str,
     dirs: impl Iterator<Item = std::path::PathBuf>,
 ) -> Option<std::path::PathBuf> {
-    use std::os::unix::fs::PermissionsExt;
-    dirs.map(|dir| dir.join(name)).find(|p| {
-        p.metadata()
-            .is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
-    })
+    dirs.map(|dir| dir.join(name)).find(|p| is_executable(p))
 }
 
 #[cfg(all(test, unix))]

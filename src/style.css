@@ -37,6 +37,8 @@
   background: var(--panel); box-shadow: 0 .35rem 1.25rem #142f3926;
 }
 .settings-panel strong { display: block; }
+.settings-panel fieldset { display: grid; gap: .25rem; min-width: 0; border: 1px solid var(--line); }
+.settings-panel fieldset label:has(textarea), .settings-panel fieldset label:has(input:not([type=radio])) { display: grid; }
 .preferences label { display: inline-flex; align-items: center; gap: .25rem; padding: .3rem 0; margin-inline-end: .6rem; cursor: pointer; }
 .preferences input { accent-color: var(--teal); }
 body { margin: 0; }

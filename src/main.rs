@@ -1,3 +1,5 @@
+#[cfg(feature = "desktop")]
+mod agent;
 mod comments;
 #[cfg(feature = "desktop")]
 mod definition;
@@ -39,6 +41,12 @@ enum ReviewMode {
     Raw,
     Flow,
     Custom,
+}
+
+impl ReviewMode {
+    fn available(self, guided_available: bool) -> bool {
+        self == Self::Raw || guided_available
+    }
 }
 
 #[cfg(feature = "desktop")]
@@ -152,7 +160,9 @@ fn App() -> Element {
         })));
     });
     #[cfg(feature = "desktop")]
-    let mut codex_available = use_signal(|| false);
+    let agent = use_signal(agent::Agent::load);
+    #[cfg(feature = "desktop")]
+    use_context_provider(|| agent);
     let open = use_callback(move |input: String| {
         if busy() {
             return;
@@ -160,8 +170,6 @@ fn App() -> Element {
         match pr_key(&input) {
             Ok(key) if cfg!(feature = "desktop") => {
                 preparing.set(None);
-                #[cfg(feature = "desktop")]
-                codex_available.set(gh::resolve("codex").is_ok());
                 pending.set(Some(key.clone()));
                 load.call((key, None));
             }
@@ -170,9 +178,14 @@ fn App() -> Element {
         }
     });
     #[cfg(feature = "desktop")]
-    let guided_available = codex_available();
+    let missing = if pending.read().is_some() {
+        agent().and_then(|a| a.resolve()).err()
+    } else {
+        None
+    };
     #[cfg(not(feature = "desktop"))]
-    let guided_available = false;
+    let missing = Some("Guided review requires the desktop app.".to_owned());
+    let guided_available = missing.is_none();
     rsx! {
         document::Title {"Ferriscope · PR reader"}
         style { {include_str!("style.css")} }
@@ -233,15 +246,15 @@ fn App() -> Element {
                 div {class:"inbox-list",
                     for (choice,title,description) in [
                         (ReviewMode::Raw,"Raw review","Read and organize the diff yourself."),
-                        (ReviewMode::Flow,"Follow the data flow","Walk through a behavior with Codex."),
-                        (ReviewMode::Custom,"Custom walkthrough","Guide Codex with your own question."),
+                        (ReviewMode::Flow,"Follow the data flow","Walk through a behavior across the diff."),
+                        (ReviewMode::Custom,"Custom walkthrough","Guide the walkthrough with your own question."),
                     ]{
-                        button {disabled:requested.read().is_some() || (choice!=ReviewMode::Raw && !guided_available),onclick:{let key=key.clone();move |_|{
+                        button {disabled:requested.read().is_some() || !choice.available(guided_available),onclick:{let key=key.clone();move |_|{
                             if let Some(snapshot)=ready.take() { choose.call((snapshot,choice)); }
                             else if busy() {requested.set(Some(choice));}
                             else {load.call((key.clone(),Some(choice)));}
                         }},
-                            strong {"{title}"} span {if choice!=ReviewMode::Raw && !guided_available {"Requires Codex CLI"}else{"{description}"}}
+                            strong {"{title}"} span {if choice!=ReviewMode::Raw && let Some(reason)=&missing {"{reason}"}else{"{description}"}}
                         }
                     }
                 }
@@ -257,6 +270,13 @@ fn App() -> Element {
         }
         }
     }
+}
+
+fn agent_settings() -> Element {
+    #[cfg(feature = "desktop")]
+    return rsx! {agent::Settings {}};
+    #[cfg(not(feature = "desktop"))]
+    rsx! {}
 }
 
 fn source_settings(_repo: String) -> Element {
@@ -301,6 +321,7 @@ fn Appearance(mut theme: Signal<String>, mut error: Signal<String>) -> Element {
                         }
                     }
                     }
+                    {agent_settings()}
                     updates::UpdateCheck {}
                 }
             }

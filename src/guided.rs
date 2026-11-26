@@ -1,6 +1,8 @@
 //! Desktop-only, opt-in walkthroughs. A route is a list of pointers into the
 //! current snapshot, never a replacement for the review's groups or draft.
-use crate::{comments::coordinates, gh, platform};
+use crate::{agent::Agent, comments::coordinates, platform};
+#[path = "acp.rs"]
+mod acp;
 use async_process::Command;
 use dioxus::dioxus_core::Task;
 use dioxus::prelude::*;
@@ -16,12 +18,14 @@ mod tests;
 const SCHEMA: &str = r#"{"type":"object","properties":{"pr":{"type":"string"},"head":{"type":"string"},"stops":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"side":{"type":"string","enum":["LEFT","RIGHT"]},"line":{"type":"integer"},"why":{"type":"string"}},"required":["path","side","line","why"],"additionalProperties":false}}},"required":["pr","head","stops"],"additionalProperties":false}"#;
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Plan {
     pr: String,
     head: String,
     stops: Vec<Stop>,
 }
 #[derive(Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 struct Stop {
     path: String,
     side: String,
@@ -36,7 +40,7 @@ pub(crate) struct Located {
 
 fn locate(plan: Plan, pr: &str, head: &str, files: &[File]) -> Result<Vec<Located>, String> {
     if plan.pr != pr || plan.head != head {
-        return Err("Codex returned a different PR or revision. Route discarded.".into());
+        return Err("The agent returned a different PR or revision. Route discarded.".into());
     }
     if !(1..=30).contains(&plan.stops.len()) {
         return Err("Expected a walkthrough with 1–30 stops.".into());
@@ -44,6 +48,9 @@ fn locate(plan: Plan, pr: &str, head: &str, files: &[File]) -> Result<Vec<Locate
     plan.stops
         .into_iter()
         .map(|stop| {
+            if !matches!(stop.side.as_str(), "RIGHT" | "LEFT") || stop.line == 0 {
+                return Err("A stop needs a LEFT or RIGHT side and a positive line number.".into());
+            }
             if stop.why.trim().is_empty() {
                 return Err("A stop is missing its explanation.".into());
             }
@@ -130,8 +137,20 @@ async fn activity(
     }
 }
 
+#[cfg(test)]
 async fn run(
     exe: &OsStr,
+    dir: Option<&Path>,
+    prompt: &str,
+    files: &[File],
+    report: impl FnMut(usize),
+) -> Result<Plan, String> {
+    generate(exe, None, dir, prompt, files, report).await
+}
+
+async fn generate(
+    exe: &OsStr,
+    acp: Option<(&Agent, tokio::sync::oneshot::Receiver<()>)>,
     dir: Option<&Path>,
     prompt: &str,
     files: &[File],
@@ -140,19 +159,32 @@ async fn run(
     let tmp = tempfile::tempdir().map_err(|e| e.to_string())?;
     let bundle = tmp.path().join("pr");
     write_bundle(&bundle, files).map_err(|e| format!("Cannot prepare PR bundle: {e}"))?;
-    let schema = tmp.path().join("schema.json");
-    let answer = tmp.path().join("route.json");
-    std::fs::write(&schema, SCHEMA).map_err(|e| e.to_string())?;
     let mut cmd = Command::new(exe);
-    cmd.env("FERRISCOPE_PR_BUNDLE", &bundle)
-        .args(["-a", "never", "exec"]);
-    cmd.current_dir(&bundle)
-        .arg("--skip-git-repo-check")
-        .env_remove("FERRISCOPE_PR_SOURCE");
+    cmd.env("FERRISCOPE_PR_BUNDLE", &bundle);
+    cmd.current_dir(&bundle).env_remove("FERRISCOPE_PR_SOURCE");
     if let Some(dir) = dir {
         cmd.env("FERRISCOPE_PR_SOURCE", dir);
     }
+    if let Some((agent, cancel)) = acp {
+        cmd.args(agent.args());
+        let text = acp::walkthrough(cmd, &bundle, dir, prompt, report, cancel).await?;
+        return serde_json::from_str(&text)
+            .map_err(|e| format!("Invalid ACP walkthrough JSON: {e}"));
+    }
+    codex(cmd, tmp.path(), prompt, report).await
+}
+
+async fn codex(
+    mut cmd: Command,
+    tmp: &Path,
+    prompt: &str,
+    report: impl FnMut(usize),
+) -> Result<Plan, String> {
+    let schema = tmp.join("schema.json");
+    let answer = tmp.join("route.json");
+    std::fs::write(&schema, SCHEMA).map_err(|e| e.to_string())?;
     let mut child = cmd
+        .args(["-a", "never", "exec", "--skip-git-repo-check"])
         .args([
             "--sandbox",
             "read-only",
@@ -221,23 +253,37 @@ pub fn Prepare(
     let mut phase = use_signal(|| 0usize);
     let mut commands = use_signal(|| 0usize);
     let goal = if !custom { FLOW.to_owned() } else { question() };
-    let text = prompt(&pr, &head, &goal, full_source());
+    let preference = use_context::<Signal<Result<Agent, String>>>();
+    // Pin the recipient displayed and invoked for this preparation screen.
+    let selected = use_hook(|| preference());
+    let mut cancel = use_signal(|| None::<tokio::sync::oneshot::Sender<()>>);
+    let agent = match selected {
+        Ok(a) => a,
+        Err(e) => return rsx! {p {role:"alert","{e}"}},
+    };
+    let label = agent.name().to_owned();
+    let mut text = prompt(&pr, &head, &goal, full_source());
+    if agent.acp {
+        text.push_str(&format!(
+            "\nReturn only a JSON object matching this schema, without Markdown: {SCHEMA}"
+        ));
+    }
     let revision_label = head.clone();
     let can_generate = !busy && !goal.trim().is_empty();
     rsx! { section {class:"guided",aria_label:"Prepare guided review",
-            small {"GUIDED REVIEW · CODEX"}
+            small {"GUIDED REVIEW · {label}"}
             h1 {if custom {"Custom walkthrough"}else{"Follow the data flow"}}
             p {class:"guided-meta","{pr} · {files.len()} changed files · " abbr {title:"{revision_label}","{revision_label.chars().take(8).collect::<String>()}"}}
             if busy {
                 ol {class:"guided-stages", aria_label:"Generation progress",
-                    for (i,name) in ["Verify PR revision","Fetch full PR source","Build walkthrough with Codex","Validate stops against the diff"].into_iter().enumerate().filter(|(i,_)|*i!=1 || full_source()) {
+                    for (i,name) in ["Verify PR revision","Fetch full PR source","Build walkthrough","Validate stops against the diff"].into_iter().enumerate().filter(|(i,_)|*i!=1 || full_source()) {
                         li {class:if i==phase() {"active"}else{""}, span {aria_hidden:"true",if i<phase() {"✓"}else if !full_source() && i>1 {"{i}"}else{"{i+1}"}} "{name}"}
                     }
                 }
                 p {role:"status",match phase() {
                     0=>rsx!{"Checking the selected source…"},
                     1=>rsx!{"Downloading and unpacking the source snapshot…"},
-                    2=>rsx!{"Codex is working…" if commands()>0 {" · {commands} commands completed"}},
+                    2=>rsx!{"{label} is working…" if commands()>0 {if agent.acp {" · {commands} updates"} else {" · {commands} commands completed"}}},
                     _=>rsx!{"Checking the revision and matching line numbers…"}
                 }}
                 progress {aria_label:"Generation in progress"}
@@ -245,21 +291,26 @@ pub fn Prepare(
             if custom {label {class:"guided-question","What would you like to understand?" textarea {rows:3,maxlength:4000,placeholder:"Trace the fallback behavior and show which tests cover it.",value:"{question}",oninput:move|e|question.set(e.value())}}}
             else {p {"Trace the PR from entry points through decisions, outcomes, and tests."}}
             div {label {input {r#type:"checkbox",checked:full_source(),aria_describedby:"source-hint",onchange:move |_|full_source.toggle()} " Include full PR source"}
-                p {id:"source-hint",class:"guided-notice","Lets Codex read unchanged files too. Ferriscope downloads and unpacks a temporary copy of the repository at this PR’s commit, so generation can take longer, especially for large repos. No local checkout needed."}
+                p {id:"source-hint",class:"guided-notice","Lets the agent read unchanged files too. Ferriscope downloads and unpacks a temporary copy of the repository at this PR’s commit, so generation can take longer, especially for large repos. No local checkout needed."}
             }
             details {summary {"Preview prompt"} pre {"{text}"}}
-            p {class:"guided-notice","Uses your local Codex login and sends PR context to your provider. The shell is read-only; configured integrations may have broader permissions."}
+            p {class:"guided-notice",if agent.acp {"PR context goes to {label}, using its local authentication and provider. Ferriscope does not sandbox ACP agents. Permission requests are declined."}else{"Uses your local Codex login and sends PR context to your provider. The shell is read-only; configured integrations may have broader permissions."}}
             button {class:"generate",disabled:!can_generate,onclick:move |_|{
                 if job.peek().is_some(){return}
                 let (repo,pr,head,files,include_source,text)=(repo.clone(),pr.clone(),head.clone(),files.clone(),full_source(),text.clone());
                 error.set(String::new());
                 phase.set(0); commands.set(0);
+                let agent=agent.clone();
                 job.set(Some(spawn(async move {
                     let result=async {
                         platform::verify_head(&pr,&head).await?;
                         let source=if include_source { phase.set(1); Some(crate::pr_source::download(&repo,&head).await?) } else { None };
                         phase.set(2);
-                        let plan=run(&gh::resolve("codex")?,source.as_ref().map(|s|s.path()),&text,&files,move |n|commands.set(n)).await?;
+                        let exe=agent.resolve()?;
+                        let acp=agent.acp.then(||{let(tx,rx)=tokio::sync::oneshot::channel();cancel.set(Some(tx));(&agent,rx)});
+                        let plan=generate(&exe,acp,source.as_ref().map(|s|s.path()),&text,&files,move |n|commands.set(n)).await;
+                        cancel.set(None);
+                        let plan=plan?;
                         phase.set(3);
                         platform::verify_head(&pr,&head).await?;
                         locate(plan,&pr,&head,&files)
@@ -269,7 +320,7 @@ pub fn Prepare(
                 })));
             },"Generate walkthrough"}
             }
-            if busy {button {onclick:move |_|{if let Some(t)=job.take(){t.cancel();}error.set("Generation cancelled.".into());},"Cancel generation"}}
+            if busy {button {onclick:move |_|{if let Some(tx)=cancel.take(){let _=tx.send(());}else if let Some(t)=job.take(){t.cancel();error.set("Generation cancelled.".into());}},"Cancel generation"}}
             if !error.read().is_empty(){p {role:"status","{error}"}}
     }}
 }

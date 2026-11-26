@@ -2,6 +2,138 @@ use super::*;
 use std::{fs, os::unix::fs::PermissionsExt};
 
 const PR: &str = "demo/service/pull/1";
+
+#[test]
+#[ignore = "uses model quota; set FERRISCOPE_TEST_ACP to an authenticated local adapter"]
+fn real_acp_synthetic_walkthrough() {
+    let exe = std::env::var("FERRISCOPE_TEST_ACP").unwrap();
+    let agent: Agent = serde_json::from_value(serde_json::json!({
+        "acp":true,"executable":exe,"arguments":""
+    }))
+    .unwrap();
+    let files: Vec<File> = serde_json::from_value(serde_json::json!([
+        {"filename":"price.py","sha":"1","status":"added","patch":"@@ -0,0 +1,2 @@\n+def total(items):\n+    return sum(items)"},
+        {"filename":"test_price.py","sha":"2","status":"added","patch":"@@ -0,0 +1,2 @@\n+from price import total\n+assert total([2, 3]) == 5"}
+    ])).unwrap();
+    let head = "1234567890abcdef1234567890abcdef12345678";
+    let text = format!(
+        "{}\nReturn only a JSON object matching this schema, without Markdown: {SCHEMA}",
+        prompt(PR, head, FLOW, false)
+    );
+    let (_tx, rx) = tokio::sync::oneshot::channel();
+    let plan = tokio::runtime::Builder::new_current_thread()
+        .enable_time()
+        .build()
+        .unwrap()
+        .block_on(generate(
+            &agent.resolve().unwrap(),
+            Some((&agent, rx)),
+            None,
+            &text,
+            &files,
+            |_| {},
+        ))
+        .unwrap();
+    let stops = locate(plan, PR, head, &files).unwrap();
+    for stop in &stops {
+        assert!(stop.location.is_ok());
+        println!("{} {} {}", stop.stop.path, stop.stop.side, stop.stop.line);
+    }
+    assert!(
+        files
+            .iter()
+            .all(|f| stops.iter().any(|s| s.stop.path == f.filename))
+    );
+}
+
+#[test]
+fn acp_without_codex() {
+    // Isolate PATH from concurrent tests; use an absolute interpreter shebang.
+    let tmp = tempfile::tempdir().unwrap();
+    if std::env::var_os("FERRISCOPE_FIXTURE_PATH").is_none() {
+        let status = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "guided::tests::acp_without_codex"])
+            .env("PATH", tmp.path())
+            .env("FERRISCOPE_FIXTURE_PATH", tmp.path())
+            .status()
+            .unwrap();
+        assert!(status.success());
+        return;
+    }
+    // macOS additionally searches standard GUI install locations outside PATH.
+    #[cfg(not(target_os = "macos"))]
+    assert!(Agent::default().resolve().is_err());
+    let exe = tmp.path().join("fixture agent");
+    let config = |mode: &str| {
+        serde_json::from_value::<Agent>(serde_json::json!({
+            "acp":true,"executable":exe,"arguments":format!("{mode}\nargument with spaces")
+        }))
+        .unwrap()
+    };
+    let available = config("success").resolve().is_ok();
+    assert!(!crate::ReviewMode::Flow.available(available));
+    assert!(crate::ReviewMode::Raw.available(available));
+    fs::write(
+        &exe,
+        concat!(
+            "#!/usr/bin/python3\n",
+            include_str!("../tests/fixtures/acp.py")
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&exe, fs::Permissions::from_mode(0o755)).unwrap();
+    fs::write(tmp.path().join("unchanged"), "fixture").unwrap();
+    let files: Vec<File> = serde_json::from_value(serde_json::json!([
+        {"filename":"entry","sha":"1","status":"added","patch":"@@ -0,0 +1 @@\n+entry"},
+        {"filename":"test","sha":"2","status":"added","patch":"@@ -0,0 +1 @@\n+test"}
+    ]))
+    .unwrap();
+    tokio::runtime::Builder::new_current_thread()
+        .enable_time()
+        .build()
+        .unwrap()
+        .block_on(async {
+            for (mode, error) in [
+                ("success", None),
+                ("v1", Some("Incompatible ACP")),
+                ("no-session", Some("session support")),
+                ("invalid", Some("Invalid ACP walkthrough JSON")),
+                ("crash", Some("disconnected")),
+                ("malformed", Some("Malformed ACP JSON")),
+                ("cancel", Some("cancelled")),
+            ] {
+                let agent = config(mode);
+                let (tx, rx) = tokio::sync::oneshot::channel();
+                let mut tx = Some(tx);
+                let plan = generate(
+                    &agent.resolve().unwrap(),
+                    Some((&agent, rx)),
+                    Some(tmp.path()),
+                    "fixture",
+                    &files,
+                    |_| {
+                        if mode == "cancel"
+                            && let Some(tx) = tx.take()
+                        {
+                            tx.send(()).unwrap();
+                        }
+                    },
+                )
+                .await;
+                if let Some(expected) = error {
+                    let actual = plan.err().expect("expected error");
+                    assert!(actual.contains(expected), "{mode}: {actual}");
+                } else {
+                    let stops = locate(plan.unwrap(), PR, "rev", &files).unwrap();
+                    assert_eq!(
+                        [stops[0].location, stops[1].location],
+                        [Ok((0, 1)), Ok((1, 1))]
+                    );
+                }
+            }
+            assert!(tmp.path().join("cancelled").exists());
+        });
+}
 fn executable(dir: &Path, script: &str) -> std::path::PathBuf {
     let exe = dir.join("fake-codex");
     fs::write(&exe, format!("#!/bin/sh\nset -eu\n{script}")).unwrap();

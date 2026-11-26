@@ -266,6 +266,18 @@ esac"#).unwrap();
         let mut open = use_signal(|| false);
         let mut outcome = use_signal(|| Outcome::Comment);
         let mut summary = use_signal(String::new);
+        let dismiss = use_callback(move |()| {
+            if busy() {
+                return;
+            }
+            if anchor.peek().is_some() {
+                text.set(String::new());
+                anchor.set(None);
+            } else {
+                open.set(false);
+            }
+            crate::focus_reader();
+        });
         let has_text = use_memo(move || !text.read().trim().is_empty());
         let has_summary = use_memo(move || !summary.read().trim().is_empty());
         let stale = !draft.read().notes.is_empty() && draft.read().head != head;
@@ -286,7 +298,13 @@ esac"#).unwrap();
         let target = anchor();
         let notes = draft.read().notes.clone();
         rsx! {
-          footer {class:"review-tray",
+          footer {class:"review-tray",onkeydown:move |e:KeyboardEvent|{
+              if e.key()==Key::Escape && !e.is_composing() && (open() || anchor.peek().is_some()) {
+                  e.stop_propagation();
+                  e.prevent_default();
+                  dismiss.call(());
+              }
+          },
             if !message.read().is_empty(){p {class:"review-message",role:"status","{message}"}}
             if target.is_none(){
                 div {class:"review-actions",role:"group",aria_label:"GitHub review actions",onkeydown:crate::keep_native_space,
@@ -300,7 +318,7 @@ esac"#).unwrap();
                 }
             }
             if open() || target.is_some(){
-                section {class:"drafts",aria_label:if target.is_some() {"Draft inline comment"}else{"Review summary"},onkeydown:move|e|e.stop_propagation(),
+                section {class:"drafts",aria_label:if target.is_some() {"Draft inline comment"}else{"Review summary"},onkeydown:move|e:KeyboardEvent|if e.key()!=Key::Escape {e.stop_propagation()},
                     div {class:"draft-fields",
                         if target.is_some(){strong {"Draft inline comment"}}
                         if stale {p {"These notes refer to an older revision. Copy their text, remove them, then select lines in the new diff."}}
@@ -322,7 +340,7 @@ esac"#).unwrap();
                             button {disabled:busy()||stale||!has_text()||loaded.is_err(),onclick:{
                                 let (a,head)=(a.clone(),head.clone());move |_|{let mut d=draft();d.head=head.clone();d.notes.push(Note{anchor:a.clone(),body:text()});if persist.call(d){text.set(String::new());anchor.set(None);crate::focus_reader()}}
                             },"Save draft"}
-                            button {onclick:move |_|{text.set(String::new());anchor.set(None);crate::focus_reader()},"Cancel"}
+                            button {disabled:busy(),title:"Cancel (Esc)",onclick:move |_|dismiss.call(()),"Cancel"}
                         } else {
                             button {class:"publish-review",disabled:busy()||stale||loaded.is_err()||outcome().validate(!notes.is_empty(),has_summary()).is_err(),onclick:move |_|{
                                 if busy(){return}
@@ -333,7 +351,7 @@ esac"#).unwrap();
                                     Err(e)=>message.set(e)
                                 }busy.set(false);});
                             },if busy(){"Sending…"}else{match outcome(){Outcome::Approve=>"Approve on GitHub",Outcome::Changes=>"Request changes on GitHub",Outcome::Comment=>"Post to GitHub"}}}
-                            button {disabled:busy(),onclick:move |_|{open.set(false);crate::focus_reader()},"Back to diff"}
+                            button {disabled:busy(),title:"Back to diff (Esc)",onclick:move |_|dismiss.call(()),"Back to diff"}
                         }
                     }
                 }

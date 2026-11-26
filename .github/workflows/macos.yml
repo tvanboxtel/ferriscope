@@ -26,7 +26,7 @@ jobs:
           set -eu
           app=target/dist/Ferriscope.app
           plutil -lint "$app/Contents/Info.plist"
-          lipo -verify_arch arm64 "$app/Contents/MacOS/ferriscope"
+          lipo "$app/Contents/MacOS/ferriscope" -verify_arch arm64
           codesign --verify --strict "$app"
           open -n "$app"
           for _ in {1..20}; do

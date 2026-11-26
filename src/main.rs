@@ -1,4 +1,6 @@
 mod comments;
+#[cfg(feature = "desktop")]
+mod definition;
 mod diff;
 #[cfg(not(target_arch = "wasm32"))]
 mod gh;
@@ -46,6 +48,8 @@ type Route = ();
 
 #[component]
 fn App() -> Element {
+    #[cfg(feature = "desktop")]
+    definition::use_preferences();
     let theme = use_signal(platform::load_theme);
     let mut url = use_signal(String::new);
     let mut busy = use_signal(|| false);
@@ -174,6 +178,7 @@ fn App() -> Element {
         style { {include_str!("style.css")} }
         div {class:"workspace", "data-theme":"{theme}",
         header {Appearance {theme,error} small {"PR READER"}
+            {source_settings(session.read().as_ref().map(|(s,_)|s.key.split("/pull/").next().unwrap_or("").to_owned()).unwrap_or_default())}
             if cfg!(feature = "desktop") && pending.read().is_none() && session.read().is_some() {
                 button {disabled:busy(),onclick:move |_|{
                     show_recents.set(false);
@@ -254,9 +259,17 @@ fn App() -> Element {
     }
 }
 
+fn source_settings(_repo: String) -> Element {
+    #[cfg(feature = "desktop")]
+    return rsx! {for repo in [_repo]{definition::SourceSettings {key:"{repo}",initial_repo:repo.clone()}}};
+    #[cfg(not(feature = "desktop"))]
+    rsx! {}
+}
 fn home(_open: Callback<String>, _busy: bool) -> Element {
     #[cfg(feature = "desktop")]
-    return rsx! { inbox::YourPrs {open:_open,busy:_busy} };
+    return rsx! {
+        inbox::YourPrs {open:_open,busy:_busy}
+    };
     #[cfg(not(feature = "desktop"))]
     rsx! {
         section {class:"intro",
@@ -303,6 +316,15 @@ fn Reader(
     dark: bool,
     route: Option<Route>,
 ) -> Element {
+    #[cfg(feature = "desktop")]
+    definition::use_session(
+        &pr,
+        &head,
+        files
+            .iter()
+            .find(|f| definition::supports(&f.filename) && f.change_type() != "removed")
+            .map(|f| f.filename.as_str()),
+    );
     use_context_provider(|| Rc::new(std::cell::RefCell::new(diff::HighlightCache::default())));
     let mut state = use_signal(|| initial.clone());
     let index = use_hook(|| {
@@ -315,6 +337,7 @@ fn Reader(
         )
     });
     let mut active = use_signal(|| None::<usize>);
+    let mut reading_source = use_signal(|| false);
     let mut folders = use_signal(HashSet::<(String, String)>::new);
     // An expanded kind can contain thousands of files. Keep its full logical
     // order for keyboard navigation, but mount the sidebar in small batches.
@@ -335,6 +358,7 @@ fn Reader(
     let mut guided_line = use_signal(|| None::<(usize, usize, u64)>);
     use_effect(move || {
         let _ = active();
+        reading_source.set(false);
         document::eval(
             "const diff = document.querySelector('.diff-scroll'); if (diff) diff.scrollTop = 0;",
         );
@@ -508,7 +532,7 @@ fn Reader(
         main { tabindex:"-1",
             onmounted:move |e|async move{let _=e.set_focus(true).await;},
             onkeydown:move |e:KeyboardEvent|{
-                if !e.modifiers().is_empty(){return}
+                if reading_source() || !e.modifiers().is_empty(){return}
                 if e.key()==Key::Character("/".into()){e.prevent_default();document::eval("document.getElementById('file-search')?.focus()");return}
                 if e.key()==Key::Character(" ".into()) && active().is_some(){e.prevent_default();if !e.is_auto_repeating(){toggle.call(())}return}
                 let dest=match e.key(){Key::Character(k) if k=="j"=>next,Key::Character(k) if k=="k"=>previous,_=>return};
@@ -610,9 +634,10 @@ fn Reader(
                 }
                 }
             }
-            article {class:"reader",
+            article {class:if reading_source() {"reader reading-source"}else{"reader"},
                 div {class:"reader-top",
                     nav {class:"file-nav",aria_label:"File navigation",onkeydown:keep_native_space,
+                        {lookup_status()}
                         span { if let Some(label)=counter {"{label}"} else if let Some(p)=pos {"File {p+1} of {files.len()}"} else {"{files.len()} files"} }
                         button {disabled:previous.is_none(),onclick:move |_|if let Some(p)=previous{navigate.call(p)}, "Previous " kbd {"K"}}
                         button {disabled:next.is_none(),onclick:move |_|if let Some(p)=next{navigate.call(p)}, "Next " kbd {"J"}}
@@ -636,14 +661,36 @@ fn Reader(
                 div {class:"diff-scroll",
                     if let Some(f)=file {
                         if let Some(patch)=f.patch(){
-                            diff::Diff {key:"{f.filename}",path:f.filename.clone(),patch:patch.clone(),dark,oncomment:move |a|anchor.set(Some(a)),anchor:anchor(),guided:guided_line().map(|(_,r,n)|(r,n))}
+                            {navigable_diff(&f.filename,&head,reading_source,rsx! {
+                                diff::Diff {key:"{f.filename}",path:f.filename.clone(),patch:patch.clone(),dark,oncomment:move |a|anchor.set(Some(a)),anchor:anchor(),guided:guided_line().map(|(_,r,n)|(r,n))}
+                            })}
                         } else {p {"GitHub supplied no text patch for this file. Open the GitHub diff for details."}}
                     }else{div {class:"empty",span {class:"diff-icon",aria_hidden:"true","±"} small {"DIFF VIEWER"} h2 {"Choose a file to begin"} p {"Expand a group and select a file to read its changes."}}}
                 }
-                {draft_tray(pr.clone(),head,anchor,dark)}
+                {draft_tray(pr.clone(),head.clone(),anchor,dark)}
+                if reading_source() { {source_pane(reading_source,dark,&head)} }
             }
         }
     }
+}
+fn lookup_status() -> Element {
+    #[cfg(feature = "desktop")]
+    return rsx! {definition::LookupStatus {}};
+    #[cfg(not(feature = "desktop"))]
+    rsx! {}
+}
+fn source_pane(_reading: Signal<bool>, _dark: bool, _head: &str) -> Element {
+    #[cfg(feature = "desktop")]
+    return rsx! { definition::SourcePane {reading:_reading,dark:_dark,head:_head} };
+    #[cfg(not(feature = "desktop"))]
+    rsx! {}
+}
+fn navigable_diff(_path: &str, _head: &str, _reading: Signal<bool>, children: Element) -> Element {
+    #[cfg(feature = "desktop")]
+    if definition::supports(_path) {
+        return rsx! { definition::NavigableDiff {key:"{_path}",path:_path,head:_head,reading:_reading,{children}} };
+    }
+    children
 }
 fn describe_line_counts(added: u32, removed: u32) -> String {
     format!("Lines added: {added}; lines removed: {removed}")

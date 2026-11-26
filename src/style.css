@@ -72,12 +72,35 @@ aside, article, .intro { border: 1px solid var(--line); border-radius: 1rem; bac
 aside, .reader { height: calc(100dvh - 6.75rem); }
 aside { padding: 1.35rem; overflow: auto; }
 .reader {
+  position: relative;
   --reader-gutter: clamp(1.25rem, 3vw, 3rem);
   display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-width: 0; overflow: hidden;
 }
 .file-heading { padding: .85rem var(--reader-gutter) 0; }
 .diff-scroll { overflow: auto; padding: .35rem var(--reader-gutter) 1rem; }
 .diff-scroll > pre { margin-top: 0; }
+.definition-onboarding > summary { list-style: none; white-space: nowrap; padding: .44rem .65rem; border: 1px solid #536c72; border-radius: .5rem; }
+.definition-onboarding summary { cursor: pointer; }
+.definition-setup { position: absolute; z-index: 4; inset: calc(100% + .25rem) auto auto var(--header-gutter); width: min(25rem,calc(100vw - 2 * var(--header-gutter))); max-height: 65dvh; overflow: auto; background: var(--panel); color: var(--ink); display: grid; gap: .65rem; padding: 1rem; border: 1px solid var(--line); border-radius: .65rem; box-shadow: 0 .35rem 1.25rem #142f3930; overflow-wrap: anywhere; }
+.definition-setup p {margin:0}
+.definition-setup > button { justify-self:start; }
+.definition-setup label { display: grid; }
+.definition-setup .fetch-option { display:flex; align-items:center; gap:.5rem; }
+.connected-checkout {color:var(--teal)}
+.lookup-status { display:inline-flex; align-items:center; gap:.4rem; overflow-wrap:anywhere; }
+.source-timings { position:relative; font-size:.8rem; color:var(--muted); }
+.source-timings summary { cursor:pointer; white-space:nowrap; }
+.source-timings ul { position:absolute; z-index:2; inset-inline-start:0; width:max-content; margin:.35rem 0; padding:.6rem 1rem; list-style:none; border:1px solid var(--line); border-radius:.5rem; background:var(--panel); }
+.lookup-spinner { flex:none; width:.85rem; height:.85rem; border:2px solid var(--line); border-top-color:var(--teal); border-radius:50%; animation:lookup-spin .8s linear infinite; }
+@keyframes lookup-spin { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion:reduce){.lookup-spinner {animation:none}}
+.reading-source > :not(.definition-view) { visibility: hidden; }
+.definition-view { position: absolute; inset: 0; background: var(--panel); display: grid; grid-template-rows: auto minmax(0,1fr); padding: 1rem; }
+.definition-view pre { margin-bottom: 0; }
+.definition-view > .definition-diff { min-height: 0; overflow: hidden; }
+.definition-view > .definition-diff > pre { margin: 0; height: 100%; }
+.definition-line { background: var(--selected); box-shadow: inset 3px 0 var(--teal); }
+.source-number { display: inline-block; min-width: 4em; color: var(--muted); user-select: none; }
 h1,h2,h3 { letter-spacing: -.045em; line-height: 1.2; margin: .45rem 0; overflow-wrap: anywhere; }
 p { color: var(--muted); margin: .45rem 0 1.6rem; }
 aside section { border-bottom: 1px solid var(--line); }

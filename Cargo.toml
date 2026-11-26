@@ -6,7 +6,7 @@ rust-version = "1.100"
 
 [features]
 web = ["dioxus/web"]
-desktop = ["dioxus/desktop", "dep:tar", "dep:flate2"]
+desktop = ["dioxus/desktop", "dep:tar", "dep:flate2", "dep:url", "dep:rfd"]
 
 [dependencies]
 dioxus = "=0.7.10"
@@ -25,6 +25,8 @@ web-sys = { version = "0.3", features = ["Window", "Storage"] }
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tar = { version = "0.4.45", default-features = false, optional = true }
 flate2 = { version = "1", optional = true }
+url = { version = "2", optional = true }
+rfd = { version = "0.17.2", default-features = false, features = ["xdg-portal"], optional = true }
 dirs = "6"
 semver = "1"
 tempfile = "3"

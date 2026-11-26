@@ -53,6 +53,14 @@ The **Ferriscope ▾** menu holds appearance settings and the desktop release ch
 
 ## Other ways to run Ferriscope
 
+### Go to definition (desktop source build)
+
+In the top toolbar, open **Code navigation** and choose the local repository folder. Confirm the GitHub repository and detected TypeScript server, then click **Trust and connect**. You can do this on any branch, before opening a PR. Skip it entirely if you just want to review.
+
+In a connected repo, **Ctrl-click** a TypeScript identifier (**⌘-click** on macOS) on an added or context line. Ferriscope runs the trusted server in a temporary checkout at the displayed PR commit, not on your working files. You can stay on your branch with uncommitted changes. To fetch missing PR commits automatically, enable **Fetch missing PR commits automatically** in **Code navigation**. This is off by default, including for previously connected repos. Opening a PR with TypeScript changes prepares its temporary checkout in the background. With fetch permission, this also downloads a missing commit before you select a file; without permission, preparation stays local. An early Ctrl-click waits for the same preparation rather than starting it again. By default the first lookup starts the language server. To overlap startup and TypeScript project loading with reading, enable **Start TypeScript indexing when opening a PR** for the connected repository. This runs the trusted server in the background after checkout preparation. All jumps in that reader reuse the server, including Ctrl-clicks inside definition source. **Previous definition** retraces a jump; **Back to diff** immediately returns to the review. Ferriscope does not install dependencies there. **Back to diff** preserves your place and draft. The connection and fetch permission are saved per repository across restarts. To disconnect, open **Code navigation** and choose **Disconnect checkout**.
+
+To exercise the round trip on Linux, run `cargo build --locked --features desktop`, then `xvfb-run -a -s '-screen 0 1280x960x24' node tests/definition/desktop.mjs` (Node 22+, Python 3, Xvfb, xdotool). It creates a temporary checkout and mocks GitHub and the LSP server. Set `FERRISCOPE_TEST_LSP` to an existing TypeScript server executable's absolute path to run the same desktop scenario against that server.
+
 <details>
 <summary>Build the latest desktop version from source</summary>
 

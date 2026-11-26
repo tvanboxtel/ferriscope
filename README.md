@@ -4,12 +4,12 @@
 
 ## TL;DR — install and open a PR
 
-**No Rust or source checkout needed.** Pick your [v0.1.2 download](https://github.com/tvanboxtel/ferriscope/releases/tag/v0.1.2):
+**No Rust or source checkout needed.** Pick your [v0.1.3 download](https://github.com/tvanboxtel/ferriscope/releases/tag/v0.1.3):
 
 | Your computer | Download | Install |
 | --- | --- | --- |
-| **Mac with Apple Silicon** (M-series) | [Ferriscope for Mac (.zip)](https://github.com/tvanboxtel/ferriscope/releases/download/v0.1.2/Ferriscope-macOS-arm64.zip) | Unzip, drag **Ferriscope.app** into **Applications**, then open it. |
-| **Linux x86-64** | [Ferriscope for Linux (.tar.gz)](https://github.com/tvanboxtel/ferriscope/releases/download/v0.1.2/ferriscope-0.1.2-linux-x86_64.tar.gz) | Extract, run `sh install.sh` inside the extracted folder, then open **Ferriscope** from the applications menu. No `sudo`. |
+| **Mac with Apple Silicon** (M-series) | [Ferriscope for Mac (.zip)](https://github.com/tvanboxtel/ferriscope/releases/download/v0.1.3/Ferriscope-macOS-arm64.zip) | Unzip, drag **Ferriscope.app** into **Applications**, then open it. |
+| **Linux x86-64** | [Ferriscope for Linux (.tar.gz)](https://github.com/tvanboxtel/ferriscope/releases/download/v0.1.3/ferriscope-0.1.3-linux-x86_64.tar.gz) | Extract, run `sh install.sh` inside the extracted folder, then open **Ferriscope** from the applications menu. No `sudo`. |
 
 **First launch:** Ferriscope uses your [GitHub CLI](https://cli.github.com/) login. If you haven’t signed in, run `gh auth login --hostname github.com` in a terminal. Then paste a PR URL **in the Ferriscope window** and click **Open / refresh**. Press **J** to start reading.
 
@@ -26,12 +26,12 @@ This build is ad-hoc signed, **not Apple notarized**. Gatekeeper may block it. I
 Run from any directory:
 
 ```sh
-curl -fLO https://github.com/tvanboxtel/ferriscope/releases/download/v0.1.2/ferriscope-0.1.2-linux-x86_64.tar.gz &&
-tar -xzf ferriscope-0.1.2-linux-x86_64.tar.gz &&
-sh ferriscope-0.1.2-linux-x86_64/install.sh
+curl -fLO https://github.com/tvanboxtel/ferriscope/releases/download/v0.1.3/ferriscope-0.1.3-linux-x86_64.tar.gz &&
+tar -xzf ferriscope-0.1.3-linux-x86_64.tar.gz &&
+sh ferriscope-0.1.3-linux-x86_64/install.sh
 ```
 
-The binary was built on Arch Linux and needs compatible GTK 3 and WebKitGTK 4.1 runtime libraries. The installer registers the launcher and icon and places the executable at `~/.local/bin/ferriscope`. To update, close the app and install the [latest release](https://github.com/tvanboxtel/ferriscope/releases/latest) the same way; saved reviews stay on disk. [Uninstall instructions](packaging/linux/INSTALL.txt).
+The binary needs compatible GTK 3 and WebKitGTK 4.1 runtime libraries. The installer registers the launcher and icon and places the executable at `~/.local/bin/ferriscope`. To update, close the app and install the [latest release](https://github.com/tvanboxtel/ferriscope/releases/latest) the same way; saved reviews stay on disk. [Uninstall instructions](packaging/linux/INSTALL.txt).
 
 </details>
 

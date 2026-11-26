@@ -44,6 +44,12 @@ body { margin: 0; }
 header, .brand, .row, .order, form, .tools, .organize { display: flex; align-items: center; gap: .55rem; }
 header { padding: .9rem clamp(1rem, 3vw, 3rem); background: var(--header); color: #f6fbfa; }
 .brand { gap: .7rem; }
+.recent-prs { position: relative; }
+.recent-panel { position:absolute; z-index:5; inset-inline-end:0; top:calc(100% + .4rem); background:var(--panel); color:var(--ink); padding:.55rem; border:1px solid var(--line); border-radius:.65rem; box-shadow:0 .4rem 1.2rem #142f3926; width:max-content; max-width:min(23rem,85vw); max-height:55vh; overflow:auto; }
+.recent-panel button { display:block; width:100%; text-align:start; overflow-wrap:anywhere; }
+.recent-panel .clear-history { margin-top:.45rem; font-size:.82rem; }
+.recent-panel p { margin:.35rem; }
+@media (max-width:720px) { .recent-panel { inset-inline-start:0; inset-inline-end:auto; } }
 .brand strong { font-size: 1.35rem; letter-spacing: -.05em; }
 .mark, .diff-icon { display: grid; place-items: center; border-radius: .65rem; font: bold 1.65rem/1 monospace; }
 .mark, .mark svg { width: 2.2rem; height: 2.2rem; }

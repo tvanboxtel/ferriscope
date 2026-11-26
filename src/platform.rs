@@ -122,6 +122,20 @@ pub fn load(key: &str) -> Result<Review, String> {
         .map_err(|e| e.to_string())?
         .unwrap_or_default())
 }
+const RECENTS: &str = "recent-prs";
+pub fn load_recents() -> Vec<String> {
+    store::read(RECENTS)
+        .ok()
+        .flatten()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+pub fn save_recents(entries: &[String]) -> Result<(), String> {
+    store::write(
+        RECENTS,
+        &serde_json::to_string(entries).map_err(|e| e.to_string())?,
+    )
+}
 pub fn load_theme() -> String {
     store::read("appearance")
         .ok()

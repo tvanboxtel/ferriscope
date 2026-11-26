@@ -29,12 +29,13 @@ fn App() -> Element {
     let mut error = use_signal(String::new);
     let mut session = use_signal(|| None::<(String, String, Rc<Vec<File>>, Review)>);
     let mut revision = use_signal(|| 0usize);
-    let open = move |event: FormEvent| {
-        event.prevent_default();
+    let mut recents = use_signal(platform::load_recents);
+    let mut show_recents = use_signal(|| false);
+    let open = use_callback(move |input: String| {
         if busy() {
             return;
         }
-        let key = match pr_key(&url.read()) {
+        let key = match pr_key(&input) {
             Ok(k) => k,
             Err(e) => {
                 error.set(e);
@@ -42,6 +43,8 @@ fn App() -> Element {
             }
         };
         busy.set(true);
+        url.set(input);
+        show_recents.set(false);
         error.set(String::new());
         spawn(async move {
             let result = async {
@@ -54,6 +57,14 @@ fn App() -> Element {
             .await;
             match result {
                 Ok(s) => {
+                    let mut list = recents();
+                    list.retain(|key| key != &s.0);
+                    list.insert(0, s.0.clone());
+                    list.truncate(10);
+                    if let Err(e) = platform::save_recents(&list) {
+                        error.set(format!("Could not save recent PRs: {e}"))
+                    }
+                    recents.set(list);
                     session.set(Some(s));
                     revision += 1
                 }
@@ -61,15 +72,27 @@ fn App() -> Element {
             }
             busy.set(false);
         });
-    };
+    });
     rsx! {
         document::Title {"Ferriscope · PR reader"}
         style { {include_str!("style.css")} }
         div {class:"workspace", "data-theme":"{theme}",
         header {div {class:"brand", span {class:"mark",aria_hidden:"true",dangerous_inner_html:include_str!("../assets/ferriscope.svg")} strong {"Ferriscope"}} small {"PR READER"}
-            form {onsubmit:open,
+            form {onsubmit:move |event|{event.prevent_default();let input=url();open.call(input)},
                 input {aria_label:"GitHub PR URL",placeholder:"https://github.com/owner/repo/pull/123",value:"{url}",oninput:move|e|url.set(e.value())}
                 button {disabled:busy(), if busy() {"Loading…"} else {"Open / refresh"}}
+            }
+            div {class:"recent-prs",onkeydown:move|e|if e.key()==Key::Escape{show_recents.set(false);document::eval("document.getElementById('recent-toggle')?.focus()");},
+                button {id:"recent-toggle",aria_expanded:show_recents(),disabled:busy(),onclick:move |_|show_recents.toggle(),"Recent PRs"}
+                if show_recents(){
+                    section {class:"recent-panel",aria_label:"Recently opened pull requests",
+                        if recents.read().is_empty(){p {"No recently opened PRs yet."}}
+                        for key in recents.read().iter(){
+                            button {key:"{key}",onclick:{let link=format!("https://github.com/{key}");move |_|open.call(link.clone())},"{key}"}
+                        }
+                        if !recents.read().is_empty(){button {class:"clear-history",onclick:move |_|match platform::save_recents(&[]){Ok(())=>recents.set(Vec::new()),Err(e)=>error.set(e)},"Clear history"}}
+                    }
+                }
             }
         }
         if !error.read().is_empty(){p {role:"alert","{error}"}}

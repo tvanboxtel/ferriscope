@@ -75,7 +75,9 @@ async function run() {
     await page.reload();
     await page.getByText("Appearance", {exact:true}).click();
     assert.ok(await page.getByRole("radio", {name:"Dusk"}).isChecked());
-    await open(url, "demo/repo/pull/2");
+    await page.getByRole("button", {name:"Recent PRs"}).click();
+    await page.getByRole("button", {name:"demo/repo/pull/2",exact:true}).click();
+    await page.getByRole("heading", {name:"demo/repo/pull/2"}).waitFor();
     await page.getByRole("button", {name: /^Account deletion/}).click();
     await page.getByText("Tests · Reviewed", { exact: true }).waitFor();
     files[2].sha = "new";
@@ -86,6 +88,11 @@ async function run() {
     await toggle.click();
     const group = page.locator("section").filter({ has: toggle });
     await group.getByText("Tests · Changed", { exact: true }).waitFor();
+    await group.getByText("Implementation · Reviewed", { exact: true }).waitFor();
+    await page.getByRole("button", {name:"Recent PRs"}).click();
+    assert.equal(await page.getByRole("button",{name:"demo/repo/pull/2",exact:true}).count(),1);
+    await page.getByRole("button", {name:"Clear history"}).click();
+    await page.getByText("No recently opened PRs yet.").waitFor();
     await group.getByText("Implementation · Reviewed", { exact: true }).waitFor();
     console.log("Browser review workflow passed");
   } finally {

@@ -1,0 +1,45 @@
+name: macOS desktop
+
+on:
+  pull_request:
+  workflow_dispatch:
+  push:
+    branches: [main, ci/macos-desktop]
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  apple-silicon:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build Apple Silicon app
+        run: bash packaging/macos/package.sh
+      - name: Launch the packaged app
+        shell: bash
+        run: |
+          set -eu
+          app=target/dist/Ferriscope.app
+          plutil -lint "$app/Contents/Info.plist"
+          lipo -verify_arch arm64 "$app/Contents/MacOS/ferriscope"
+          codesign --verify --strict "$app"
+          open -n "$app"
+          for _ in {1..20}; do
+            if pgrep -f '/Ferriscope[.]app/Contents/MacOS/ferriscope' >/dev/null; then
+              sleep 3
+              pgrep -f '/Ferriscope[.]app/Contents/MacOS/ferriscope' >/dev/null && exit 0
+            fi
+            sleep 1
+          done
+          echo "Ferriscope did not stay running after launch" >&2
+          exit 1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Ferriscope-macOS-Apple-Silicon
+          path: target/dist/Ferriscope-macOS-arm64.zip
+          if-no-files-found: error

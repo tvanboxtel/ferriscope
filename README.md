@@ -12,6 +12,22 @@ Review a GitHub pull request by behavior, not alphabetical path. Put a handler b
 
 ## Install the desktop app
 
+### Linux x86-64: download the release
+
+Install [Ferriscope v0.1.0](https://github.com/tvanboxtel/ferriscope/releases/tag/v0.1.0) without Rust or `sudo`:
+
+```sh
+curl -fLO https://github.com/tvanboxtel/ferriscope/releases/download/v0.1.0/ferriscope-0.1.0-linux-x86_64.tar.gz
+tar -xzf ferriscope-0.1.0-linux-x86_64.tar.gz
+sh ferriscope-0.1.0-linux-x86_64/install.sh
+```
+
+Open **Ferriscope** from your applications menu or run `~/.local/bin/ferriscope`. The binary was built on Arch Linux and requires compatible GTK 3 and WebKitGTK 4.1 runtime libraries. Sign in with `gh auth login` to open PRs. See the [latest release](https://github.com/tvanboxtel/ferriscope/releases/latest) for updates or the [uninstall instructions](packaging/linux/INSTALL.txt) to remove it.
+
+### Build from source
+
+**Testing the Apple Silicon Mac build:** the [macOS desktop workflow](https://github.com/tvanboxtel/ferriscope/actions/workflows/macos.yml) builds a `.app` and checks that it launches before uploading an artifact. From a successful run, download **Ferriscope-macOS-Apple-Silicon** while signed in to GitHub. Extract the Actions download and the app ZIP inside it, then drag **Ferriscope.app** into Applications. This is an ad-hoc signed test build, not Developer ID signed or notarized; Gatekeeper may block it. No Mac binary is included in the original Linux release.
+
 **Install or update to the latest `main`**, from any directory:
 
 ```sh
@@ -25,15 +41,7 @@ This builds an optimized binary locally. You’ll need [rustup](https://rustup.r
 **macOS:** The native Dioxus desktop app targets macOS too. Install Xcode Command Line Tools (`xcode-select --install`), Rust, and `gh`, then use the same Cargo command above. This installs a terminal-launchable executable, not a signed `.app` or `.dmg`. The prebuilt Linux archive does not run on macOS. Linux is tested here; the macOS build has not been verified.
 
 <details>
-<summary>Linux binary archive (no Rust compiler needed)</summary>
-
-**Have a Linux binary archive?** Extract `ferriscope-…-linux-….tar.gz`, open the extracted folder in a terminal, and run:
-
-```sh
-sh install.sh
-```
-
-Launch **Ferriscope** from your application menu or run `~/.local/bin/ferriscope`. No compiler, source checkout, or `sudo` needed. The archive includes [runtime requirements and uninstall instructions](packaging/linux/INSTALL.txt). It targets the build machine’s Linux ABI and CPU, not every Linux distribution.
+<summary>Package your own Linux binary</summary>
 
 **To build a shareable Linux archive** from this repo, run `sh packaging/linux/package.sh`. Send the resulting `.tar.gz` in `target/dist/`, not the source tree. Recipients use their own `gh` login.
 
@@ -48,6 +56,8 @@ cargo run --locked --features desktop
 ```
 
 When you see `Running target/debug/ferriscope`, **switch to the Ferriscope window**. Paste a PR URL into the field at the top and click **Open / refresh**. The URL goes in the app, not the terminal.
+
+On Linux, `cargo run` and `cargo install` do not register a desktop launcher. If your Wayland taskbar shows a generic icon, use the Linux archive installer above, close Ferriscope, then launch it from the applications menu.
 
 <details>
 <summary><strong>First time? Install the prerequisites and get the source</strong></summary>

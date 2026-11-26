@@ -96,6 +96,16 @@ async function run() {
     await page.getByRole("button", {name:"Clear history"}).click();
     await page.getByText("No recently opened PRs yet.").waitFor();
     await group.getByText("Implementation · Reviewed", { exact: true }).waitFor();
+    await page.getByRole("button", {name:"Recent PRs"}).click();
+    await page.getByRole("button", {name:"Remove group Account deletion"}).click();
+    await toggle.waitFor({state:"detached"});
+    await page.reload();
+    await open(url, "demo/repo/pull/2");
+    assert.equal(await toggle.count(),0);
+    await page.getByRole("button",{name:/^Implementation/}).click();
+    await page.getByText("Implementation · Reviewed",{exact:true}).waitFor();
+    await page.getByRole("button",{name:/^Tests/}).click();
+    await page.getByText("Tests · Changed",{exact:true}).waitFor();
     console.log("Browser review workflow passed");
   } finally {
     await browser.close();

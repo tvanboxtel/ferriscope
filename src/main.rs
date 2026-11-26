@@ -289,6 +289,16 @@ fn Reader(pr: String, head: String, files: Rc<Vec<File>>, initial: Review, dark:
                                 let n=g.name.clone();move |_|{let mut f=expanded.write();if !f.remove(&n){f.insert(n.clone());}}
                             }, span {class:"chevron",aria_hidden:"true","›"} "{g.name}" span {class:"count","{g.files.len()}"}}
                             Order {pos:gi,len:groups.len(),onmove:move |other|{let mut s=state();s.groups.swap(gi,other);save.call(s)}}
+                            if g.custom {
+                                button {aria_label:"Remove group {g.name}",title:"Return files to their default groups; keep review progress",
+                                    onclick:{let name=g.name.clone();let files=Rc::clone(&files);move |_|{
+                                        let mut s=state();
+                                        match s.remove_group(&name,&files){
+                                            Ok(())=>{save.call(s);expanded.write().remove(&name);visible.write().remove(&name);}
+                                            Err(e)=>error.set(e),
+                                        }
+                                    }},"Ungroup"}
+                            }
                         }
                         if expanded.read().contains(&g.name){
                             for (fi,path) in g.files.iter().take(visible.read().get(&g.name).copied().unwrap_or(FILE_BATCH)).enumerate(){

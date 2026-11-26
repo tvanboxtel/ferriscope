@@ -211,6 +211,16 @@ impl Review {
         );
         Ok(())
     }
+    pub fn remove_group(&mut self, name: &str, files: &[File]) -> Result<(), String> {
+        let index = self
+            .groups
+            .iter()
+            .position(|g| g.custom && g.name == name)
+            .ok_or("Only custom groups can be removed.")?;
+        self.groups.remove(index);
+        self.reconcile(files);
+        Ok(())
+    }
     pub fn status(&self, f: &File) -> &'static str {
         match self.reviewed.get(&f.filename) {
             None => "Unread",

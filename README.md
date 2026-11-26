@@ -1,115 +1,88 @@
 # <img src="assets/ferriscope.svg" width="40" height="40" alt=""> Ferriscope
 
-Review a GitHub pull request by behavior, not alphabetical path. Put a handler beside its test, skip the lockfile, and resume where you left off.
+**Review GitHub pull requests in your own order.** Read a handler beside its test, skip the lockfile, and pick up where you left off. When you’re ready, send your review to GitHub.
 
-**For private repositories or publishing reviews, use the desktop app.** The browser is a public PR reader. It cannot sign in, even if you’re signed in to github.com in another tab.
+## TL;DR — install and open a PR
 
-| What you want to do | Desktop | Browser |
+**No Rust or source checkout needed.** Pick your [v0.1.1 download](https://github.com/tvanboxtel/ferriscope/releases/tag/v0.1.1):
+
+| Your computer | Download | Install |
 | --- | --- | --- |
-| Read public PRs, search files, organize diffs, track progress | Yes | Yes |
-| Read private PRs | With your `gh` login | No |
-| Post inline comments, approve, or request changes | Yes | No |
+| **Mac with Apple Silicon** (M-series) | [Ferriscope for Mac (.zip)](https://github.com/tvanboxtel/ferriscope/releases/download/v0.1.1/Ferriscope-macOS-arm64.zip) | Unzip, drag **Ferriscope.app** into **Applications**, then open it. |
+| **Linux x86-64** | [Ferriscope for Linux (.tar.gz)](https://github.com/tvanboxtel/ferriscope/releases/download/v0.1.1/ferriscope-0.1.1-linux-x86_64.tar.gz) | Extract, run `sh install.sh` inside the extracted folder, then open **Ferriscope** from the applications menu. No `sudo`. |
 
-## Install the desktop app
+**First launch:** Ferriscope uses your [GitHub CLI](https://cli.github.com/) login. If you haven’t signed in, run `gh auth login --hostname github.com` in a terminal. Then paste a PR URL **in the Ferriscope window** and click **Open / refresh**. Press **J** to start reading.
 
-### Linux x86-64: download the release
+<details>
+<summary>Mac won’t open the app?</summary>
 
-Install [Ferriscope v0.1.0](https://github.com/tvanboxtel/ferriscope/releases/tag/v0.1.0) without Rust or `sudo`:
+This build is ad-hoc signed, **not Apple notarized**. Gatekeeper may block it. If you trust the download, follow [Apple’s instructions for opening an app from an unidentified developer](https://support.apple.com/en-us/102445); don’t disable Gatekeeper. On a managed work Mac, follow your organization’s policy. There’s no prebuilt Intel Mac or Windows download in this release.
+
+</details>
+
+<details>
+<summary>Linux: copy-paste install, requirements, and updates</summary>
+
+Run from any directory:
 
 ```sh
-curl -fLO https://github.com/tvanboxtel/ferriscope/releases/download/v0.1.0/ferriscope-0.1.0-linux-x86_64.tar.gz
-tar -xzf ferriscope-0.1.0-linux-x86_64.tar.gz
-sh ferriscope-0.1.0-linux-x86_64/install.sh
+curl -fLO https://github.com/tvanboxtel/ferriscope/releases/download/v0.1.1/ferriscope-0.1.1-linux-x86_64.tar.gz &&
+tar -xzf ferriscope-0.1.1-linux-x86_64.tar.gz &&
+sh ferriscope-0.1.1-linux-x86_64/install.sh
 ```
 
-Open **Ferriscope** from your applications menu or run `~/.local/bin/ferriscope`. The binary was built on Arch Linux and requires compatible GTK 3 and WebKitGTK 4.1 runtime libraries. Sign in with `gh auth login` to open PRs. See the [latest release](https://github.com/tvanboxtel/ferriscope/releases/latest) for updates or the [uninstall instructions](packaging/linux/INSTALL.txt) to remove it.
+The binary was built on Arch Linux and needs compatible GTK 3 and WebKitGTK 4.1 runtime libraries. The installer registers the launcher and icon and places the executable at `~/.local/bin/ferriscope`. To update, close the app and install the [latest release](https://github.com/tvanboxtel/ferriscope/releases/latest) the same way; saved reviews stay on disk. [Uninstall instructions](packaging/linux/INSTALL.txt).
 
-### Build from source
+</details>
 
-**Testing the Apple Silicon Mac build:** the [macOS desktop workflow](https://github.com/tvanboxtel/ferriscope/actions/workflows/macos.yml) builds a `.app` and checks that it launches before uploading an artifact. From a successful run, download **Ferriscope-macOS-Apple-Silicon** while signed in to GitHub. Extract the Actions download and the app ZIP inside it, then drag **Ferriscope.app** into Applications. This is an ad-hoc signed test build, not Developer ID signed or notarized; Gatekeeper may block it. No Mac binary is included in the original Linux release.
+## Your first review
 
-**Install or update to the latest `main`**, from any directory:
+- **Find a file:** press `/` to search every changed path, including collapsed groups. **Enter** opens the first match; **Esc** returns to the tree.
+- **Read related changes together:** select files with their checkboxes, name the group, and click **Review together**. Use the arrows to reorder groups or files.
+- **Keep your place:** **J / K** move forward and back; **Space** marks the current file reviewed or unread. **Recent PRs** reopens work on this device. After a push, only reviewed files whose diff changed need another look.
+- **Send feedback:** draft inline comments with the numbered `+` beside a line. Above the diff, choose **Approve**, **Request changes**, or **Post comments**. All saved inline comments are included; review the summary and confirm to publish on GitHub. Marking a file reviewed does *not* submit a review. GitHub doesn’t allow approving or requesting changes on your own PR.
+
+The **Ferriscope ▾** menu holds appearance settings and the desktop release checker. **Check for updates** links to newer releases; it doesn’t replace the running app.
+
+## Other ways to run Ferriscope
+
+<details>
+<summary>Build the latest desktop version from source</summary>
+
+Install [rustup](https://rustup.rs/), [GitHub CLI](https://cli.github.com/), and the [Dioxus desktop build dependencies for your OS](https://dioxuslabs.com/learn/0.7/getting_started/). On macOS, install Xcode Command Line Tools (`xcode-select --install`); on Linux, install the GTK 3 and WebKitGTK 4.1 development libraries.
 
 ```sh
+rustup toolchain install 1.100.0
 cargo +1.100.0 install --git https://github.com/tvanboxtel/ferriscope.git --branch main --locked --features desktop ferriscope
 ```
 
-Then run **`ferriscope`**. Run the same install command later to update. No clone, `cargo run`, or Dioxus CLI needed.
-
-This builds an optimized binary locally. You’ll need [rustup](https://rustup.rs/) (`rustup toolchain install 1.100.0`), the [desktop build dependencies](https://dioxuslabs.com/learn/0.7/getting_started/), and Cargo’s bin directory on your `PATH`. Sign in to [GitHub CLI](https://cli.github.com/) with `gh auth login` before opening a PR.
-
-**macOS:** The native Dioxus desktop app targets macOS too. Install Xcode Command Line Tools (`xcode-select --install`), Rust, and `gh`, then use the same Cargo command above. This installs a terminal-launchable executable, not a signed `.app` or `.dmg`. The prebuilt Linux archive does not run on macOS. Linux is tested here; the macOS build has not been verified.
-
-<details>
-<summary>Package your own Linux binary</summary>
-
-**To build a shareable Linux archive** from this repo, run `sh packaging/linux/package.sh`. Send the resulting `.tar.gz` in `target/dist/`, not the source tree. Recipients use their own `gh` login.
+Run `ferriscope` with Cargo’s bin directory on your `PATH`. This installs a terminal executable, not a graphical launcher. For development in a checkout, use `cargo run --locked --features desktop`. To build a shareable Linux archive, run `sh packaging/linux/package.sh`.
 
 </details>
 
-## Run from a checkout (development)
-
-From the repo root:
-
-```sh
-cargo run --locked --features desktop
-```
-
-When you see `Running target/debug/ferriscope`, **switch to the Ferriscope window**. Paste a PR URL into the field at the top and click **Open / refresh**. The URL goes in the app, not the terminal.
-
-On Linux, `cargo run` and `cargo install` do not register a desktop launcher. If your Wayland taskbar shows a generic icon, use the Linux archive installer above, close Ferriscope, then launch it from the applications menu.
-
 <details>
-<summary><strong>First time? Install the prerequisites and get the source</strong></summary>
+<summary>Run the browser version (public PRs only)</summary>
 
-1. Install [Rust via rustup](https://rustup.rs/), [GitHub CLI](https://cli.github.com/), and the [Dioxus desktop dependencies for your OS](https://dioxuslabs.com/learn/0.7/getting_started/). Linux needs GTK 3 and WebKitGTK 4.1 development libraries. Desktop does **not** need the Dioxus CLI.
-2. Clone the repo:
-   ```sh
-   git clone https://github.com/tvanboxtel/ferriscope.git
-   cd ferriscope
-   ```
-3. Run `gh auth status --hostname github.com`. If needed, sign in with `gh auth login --hostname github.com`.
-4. Run the launch command above. The first build downloads the pinned toolchain and compiles dependencies.
+The browser can read, search, group, and track **public** PRs. It can’t use your `gh` login, open private PRs, or submit reviews. For those, use desktop.
 
-</details>
-
-## Run the public PR reader in a browser
-
-**Once**, from the repo root with rustup installed:
+From the repo root with rustup installed, install the CLI **once**:
 
 ```sh
 cargo install dioxus-cli --version '=0.7.10' --locked --root target/tools
 ```
 
-**Each launch:**
+Each launch:
 
 ```sh
 target/tools/bin/dx serve --platform web --port 8080
 ```
 
-Open [localhost:8080](http://127.0.0.1:8080), then paste a **public** PR URL inside Ferriscope. Keep the terminal open; `Ctrl+C` stops the server. No `PATH` change is required. Anonymous GitHub API rate limits apply.
+Open [127.0.0.1:8080](http://127.0.0.1:8080). Use the same browser profile, host, and port to resume your reviews. Anonymous GitHub API limits apply.
 
-## At the keyboard
-
-**Recent PRs** beside the URL field reopens any of the last ten pull requests you successfully opened on this device (in the browser, this profile and origin). Clearing history removes these shortcuts, not saved reviews.
-
-Open the **Ferriscope ▾** menu to change the color theme. On desktop, **Check for updates** compares the installed version with the latest GitHub release and offers a download link. It doesn’t install anything or check for unreleased commits.
-
-| Key | Action |
-| --- | --- |
-| `/` | Search all changed file paths, including collapsed groups |
-| `Enter` / `Esc` in search | Open the first match / return to the tree |
-| `J` / `K` | Next / previous file in review order |
-| `Space` | Toggle the active file’s local reviewed status |
-
-**Organize:** check related files, name the group, and choose **Review together**. Use the arrows to reorder. Reopen the same PR to resume; after a push, only reviewed files whose diff changed need another look. Progress is local. In the browser, use the same profile, host, and port.
-
-**Publish (desktop):** use the numbered `+` beside a diff line to save an inline draft, or open **Review changes** directly. Choose **Comment**, **Approve**, or **Request changes**, then submit. Marking a file reviewed does **not** submit a GitHub review. GitHub won’t let you approve or request changes on your own PR.
-
-Both comment editors offer a local **Live preview**. Type Markdown normally; for highlighted code, start a fenced block with a language such as `rust` or `python`. The preview updates after a short typing pause and can be turned off. Nothing is sent to GitHub until you submit.
+</details>
 
 <details>
-<summary><strong>Development and performance checks</strong></summary>
+<summary>Development and performance checks</summary>
 
 ```sh
 cargo test --locked --features desktop
@@ -126,6 +99,6 @@ node tests/browser.cjs
 CHECK_BOUNDS=1 node tests/performance.cjs
 ```
 
-The workflow test uses `tests/mixed.json`; set `LIVE=1` to also open a real public PR. The performance fixture uses 600 files, a 3,000-line Rust patch, and 100 ms simulated API latency per request.
+The workflow test uses `tests/mixed.json`; set `LIVE=1` to also open a real public PR. The performance check uses 600 files, a 3,000-line Rust patch, and 100 ms simulated latency per request.
 
 </details>

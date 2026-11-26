@@ -1,6 +1,8 @@
 mod comments;
 mod diff;
 mod platform;
+#[cfg(not(target_arch = "wasm32"))]
+mod preview;
 use dioxus::prelude::*;
 use ferriscope::{File, Review, hash, kind, pr_key};
 use std::collections::{HashMap, HashSet};
@@ -23,7 +25,7 @@ fn main() {
 
 #[component]
 fn App() -> Element {
-    let mut theme = use_signal(platform::load_theme);
+    let theme = use_signal(platform::load_theme);
     let mut url = use_signal(String::new);
     let mut busy = use_signal(|| false);
     let mut error = use_signal(String::new);
@@ -66,7 +68,7 @@ fn App() -> Element {
         document::Title {"Ferriscope · PR reader"}
         style { {include_str!("style.css")} }
         div {class:"workspace", "data-theme":"{theme}",
-        header {div {class:"brand", span {class:"mark",aria_hidden:"true",dangerous_inner_html:include_str!("../assets/ferriscope.svg")} strong {"Ferriscope"}} small {"PR READER"}
+        header {Appearance {theme,error} small {"PR READER"}
             form {onsubmit:open,
                 input {aria_label:"GitHub PR URL",placeholder:"https://github.com/owner/repo/pull/123",value:"{url}",oninput:move|e|url.set(e.value())}
                 button {disabled:busy(), if busy() {"Loading…"} else {"Open / refresh"}}
@@ -76,9 +78,18 @@ fn App() -> Element {
         if let Some((pr,head,files,review))=session.read().as_ref(){
             Reader {key:"{revision}",pr:pr.clone(),head:head.clone(), files:files.clone(),initial:review.clone(),dark:theme.read().as_str()!="light"}
         }else{section {class:"intro",small {"PERSONAL REVIEW WORKSPACE"} h1 {"Read changes by purpose."} p {"Paste a pull request above to explore its files, bring related changes together, and keep track of what you’ve reviewed."}}}
-        footer {class:"preferences",
-            details {
-                summary {"Appearance"}
+        }
+    }
+}
+
+#[component]
+fn Appearance(mut theme: Signal<String>, mut error: Signal<String>) -> Element {
+    rsx! {
+            details {class:"preferences",
+                summary {class:"brand",aria_label:"Ferriscope settings",title:"Ferriscope settings",
+                    span {class:"mark",aria_hidden:"true",dangerous_inner_html:include_str!("../assets/ferriscope.svg")}
+                    strong {"Ferriscope"} span {aria_hidden:"true","▾"}
+                }
                 fieldset {legend {"Color theme"}
                     for (id,label) in [("light","Light"),("dark","Dark"),("dusk","Dusk")] {
                         label {
@@ -91,8 +102,6 @@ fn App() -> Element {
                     }
                 }
             }
-        }
-        }
     }
 }
 
@@ -292,7 +301,7 @@ fn Reader(pr: String, head: String, files: Rc<Vec<File>>, initial: Review, dark:
                     button {disabled:previous.is_none(),onclick:move |_|if let Some(p)=previous{jump.call(p)}, "Previous " kbd {"K"}}
                     button {disabled:next.is_none(),onclick:move |_|if let Some(p)=next{jump.call(p)}, "Next " kbd {"J"}}
                 }
-                {draft_tray(pr.clone(),head,anchor)}
+                {draft_tray(pr.clone(),head,anchor,dark)}
                 if let Some(f)=active().and_then(|i|files.get(i)){
                     small {"UNIFIED DIFF · {f.change_type()}"} h2 {"{f.filename}"}
                     div {class:"tools",onkeydown:keep_native_space,
@@ -323,9 +332,14 @@ fn keep_native_space(e: KeyboardEvent) {
 fn focus_reader() {
     document::eval("document.querySelector('main')?.focus({preventScroll:true})");
 }
-fn draft_tray(_pr: String, _head: String, _anchor: Signal<Option<comments::Anchor>>) -> Element {
+fn draft_tray(
+    _pr: String,
+    _head: String,
+    _anchor: Signal<Option<comments::Anchor>>,
+    _dark: bool,
+) -> Element {
     #[cfg(not(target_arch = "wasm32"))]
-    return rsx! {comments::desktop::Tray {pr:_pr,head:_head,anchor:_anchor}};
+    return rsx! {comments::desktop::Tray {pr:_pr,head:_head,anchor:_anchor,dark:_dark}};
     #[cfg(target_arch = "wasm32")]
     rsx! {}
 }

@@ -102,6 +102,8 @@ Open [localhost:8080](http://127.0.0.1:8080), then paste a **public** PR URL ins
 
 **Publish (desktop):** use the numbered `+` beside a diff line to save an inline draft, or open **Review changes** directly. Choose **Comment**, **Approve**, or **Request changes**, then submit. Marking a file reviewed does **not** submit a GitHub review. GitHub won’t let you approve or request changes on your own PR.
 
+Both comment editors offer a local **Live preview**. Type Markdown normally; for highlighted code, start a fenced block with a language such as `rust` or `python`. The preview updates after a short typing pause and can be turned off. Nothing is sent to GitHub until you submit.
+
 <details>
 <summary><strong>Development and performance checks</strong></summary>
 

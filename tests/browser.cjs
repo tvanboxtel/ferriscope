@@ -40,14 +40,16 @@ async function run() {
     assert.ok(await page.locator("pre .add span[style]").count() > 1);
     const token = page.locator("pre .add span[style]").first();
     const lightColor = await token.evaluate(el => getComputedStyle(el).color);
-    await page.getByText("Appearance", {exact:true}).click();
+    const settings = page.getByLabel("Ferriscope settings");
+    await settings.click();
     const panel = await page.getByRole("group", {name:"Color theme"}).boundingBox();
     const trigger = await page.locator(".preferences summary").boundingBox();
-    assert.ok(panel.y >= 0 && panel.y + panel.height <= trigger.y &&
-      panel.y + panel.height <= page.viewportSize().height, "Themes should open above Appearance, in view");
+    assert.ok(panel.y >= trigger.y + trigger.height &&
+      panel.y + panel.height <= page.viewportSize().height, "Themes should open below the app menu, in view");
     await page.getByRole("radio", {name:"Dark",exact:true}).check();
     await page.waitForFunction(color => getComputedStyle(document.querySelector("pre .add span")).color !== color, lightColor);
     await page.getByRole("radio", {name:"Dusk"}).check();
+    await settings.click();
     await page.locator("main").focus();
     await page.keyboard.press("j");
     await page.getByRole("heading", {name:"tests/accounts.rs"}).waitFor();
@@ -73,7 +75,7 @@ async function run() {
     await page.getByRole("button", { name: /tests\/accounts.rs/ }).click();
     await page.getByText("Mark reviewed").click();
     await page.reload();
-    await page.getByText("Appearance", {exact:true}).click();
+    await settings.click();
     assert.ok(await page.getByRole("radio", {name:"Dusk"}).isChecked());
     await open(url, "demo/repo/pull/2");
     await page.getByRole("button", {name: /^Account deletion/}).click();

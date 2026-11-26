@@ -80,15 +80,21 @@ pub mod desktop {
                 Self::Changes => "Request changes",
             }
         }
-        fn payload(self, draft: &Draft, summary: &str) -> Result<String, String> {
-            let body = summary.trim();
-            let (event, body) = match self {
-                Self::Changes if body.is_empty() => {
+        fn validate(self, has_notes: bool, has_summary: bool) -> Result<(), String> {
+            match self {
+                Self::Changes if !has_summary => {
                     return Err("Explain the changes you’re requesting.".into());
                 }
-                Self::Comment if body.is_empty() && draft.notes.is_empty() => {
+                Self::Comment if !has_summary && !has_notes => {
                     return Err("Add a summary or an inline comment.".into());
                 }
+                _ => Ok(()),
+            }
+        }
+        fn payload(self, draft: &Draft, summary: &str) -> Result<String, String> {
+            let body = summary.trim();
+            self.validate(!draft.notes.is_empty(), !body.is_empty())?;
+            let (event, body) = match self {
                 Self::Changes => ("REQUEST_CHANGES", body),
                 Self::Approve => ("APPROVE", body),
                 Self::Comment => (
@@ -223,7 +229,12 @@ esac"#).unwrap();
         assert_eq!(coordinates("@@ -4,2 +8,2 @@ fn a\n-old\n\\ No newline at end of file\n+new\n same\n@@ -0,0 +15 @@\n+more").collect::<Vec<_>>(),[None,Some(("LEFT",4)),None,Some(("RIGHT",8)),Some(("RIGHT",9)),None,Some(("RIGHT",15))]);
     }
     #[component]
-    pub fn Tray(pr: String, head: String, mut anchor: Signal<Option<Anchor>>) -> Element {
+    pub fn Tray(
+        pr: String,
+        head: String,
+        mut anchor: Signal<Option<Anchor>>,
+        dark: bool,
+    ) -> Element {
         let key = use_hook(|| format!("draft:{pr}"));
         let loaded = use_hook(|| {
             store::read(&key)
@@ -241,6 +252,8 @@ esac"#).unwrap();
         let mut open = use_signal(|| false);
         let mut outcome = use_signal(|| Outcome::Comment);
         let mut summary = use_signal(String::new);
+        let has_text = use_memo(move || !text.read().trim().is_empty());
+        let has_summary = use_memo(move || !summary.read().trim().is_empty());
         let stale = !draft.read().notes.is_empty() && draft.read().head != head;
         let persist = use_callback(move |next: Draft| {
             let json = serde_json::to_string(&next).unwrap();
@@ -270,10 +283,8 @@ esac"#).unwrap();
                         button {disabled:busy(),onclick:move |_|{let mut d=draft();d.notes.remove(i);persist.call(d);},"Remove"}
                     }}
                     if let Some(a)=target {
-                        label {"Comment on {a.path} · {a.side} {a.line}"
-                            textarea {value:"{text}",onmounted:move |e|async move{let _=e.set_focus(true).await;}, oninput:move |e|text.set(e.value())}
-                        }
-                        button {disabled:busy()||stale||text.read().trim().is_empty()||loaded.is_err(),onclick:{
+                        crate::preview::Editor {label:format!("Comment on {} · {} {}",a.path,a.side,a.line),body:text,dark,focus:true}
+                        button {disabled:busy()||stale||!has_text()||loaded.is_err(),onclick:{
                             let head=head.clone();move |_|{let mut d=draft();d.head=head.clone();d.notes.push(Note{anchor:a.clone(),body:text()});if persist.call(d){text.set(String::new());anchor.set(None)}}
                         },"Save draft"}
                         button {onclick:move |_|{text.set(String::new());anchor.set(None)},"Cancel"}
@@ -282,8 +293,8 @@ esac"#).unwrap();
                         label {"Review outcome " select {disabled:busy(),onchange:move |e|outcome.set(match e.value().as_str(){"Approve"=>Outcome::Approve,"Request changes"=>Outcome::Changes,_=>Outcome::Comment}),
                             for choice in [Outcome::Comment,Outcome::Approve,Outcome::Changes]{option {value:choice.label(),selected:outcome()==choice,"{choice.label()}"}}
                         }}
-                        label {"Review summary" textarea {value:"{summary}",disabled:busy(),oninput:move|e|summary.set(e.value()),placeholder:if outcome()==Outcome::Changes {"Explain the changes you’re requesting (required)"}else{"Add a review summary"}}}
-                        button {disabled:busy()||stale||loaded.is_err()||outcome().payload(&draft.read(),&summary.read()).is_err(),onclick:move |_|{
+                        crate::preview::Editor {label:"Review summary",body:summary,dark,disabled:busy(),placeholder:if outcome()==Outcome::Changes {"Explain the changes you’re requesting (required)"}else{"Add a review summary"}}
+                        button {disabled:busy()||stale||loaded.is_err()||outcome().validate(!notes.is_empty(),has_summary()).is_err(),onclick:move |_|{
                             if busy(){return} busy.set(true);let pr=pr.clone();let mut d=draft();if d.notes.is_empty(){d.head=head.clone()}let verdict=outcome();let body=summary();
                             spawn(async move{match publish_with(std::ffi::OsStr::new("gh"),&pr,&d,verdict,&body).await{
                                 Ok(())=>{summary.set(String::new());outcome.set(Outcome::Comment);open.set(false);if persist.call(Draft::default()){message.set("Review posted to GitHub.".into())}else{draft.set(Draft::default());message.set("Review posted, but the local draft could not be cleared. Do not resubmit it.".into())}},

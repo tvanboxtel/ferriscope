@@ -28,11 +28,11 @@
   --page: #1b1724; --panel: #282331; --header: #30213e; --subtle: #3b3248;
   --line: #4b3f5b; --muted: #c2b6ce; --teal: #d5acf6; --hover: #40354a; --selected: #493650;
 }
-.preferences { padding: 0 1.5rem .65rem; color: var(--muted); font-size: .82rem; }
-.preferences details { position: relative; width: fit-content; }
-.preferences summary { cursor: pointer; padding: .2rem 0; }
+.preferences { position: relative; }
+.preferences summary { cursor: pointer; list-style: none; }
+.preferences summary::-webkit-details-marker { display: none; }
 .preferences fieldset {
-  position: absolute; inset-inline-start: 0; bottom: calc(100% + .25rem); z-index: 2;
+  position: absolute; inset-inline-start: 0; top: calc(100% + .35rem); z-index: 2; color: var(--ink);
   display: flex; flex-wrap: wrap; gap: .75rem; width: max-content; max-width: calc(100vw - 3rem);
   margin: 0; padding: .55rem .85rem; border: 1px solid var(--line); border-radius: .6rem;
   background: var(--panel); box-shadow: 0 .35rem 1.25rem #142f3926;
@@ -63,7 +63,7 @@ button:disabled { opacity: .36; cursor: default; }
 form button, .organize button { background: #c1efdc; border-color: transparent; color: #164c40; font-weight: 650; white-space: nowrap; }
 main { display: grid; grid-template-columns: clamp(18rem, 30vw, 28rem) minmax(0, 1fr); gap: 1rem; padding: 1rem; }
 aside, article, .intro { border: 1px solid var(--line); border-radius: 1rem; background: var(--panel); box-shadow: 0 3px 14px #20374308; }
-aside, article { height: calc(100dvh - 9rem); overflow: auto; }
+aside, article { height: calc(100dvh - 6.75rem); overflow: auto; }
 aside { padding: 1.35rem; }
 article { padding: clamp(1.25rem, 3vw, 3rem); }
 h1,h2,h3 { letter-spacing: -.045em; line-height: 1.2; margin: .45rem 0; overflow-wrap: anywhere; }
@@ -89,6 +89,9 @@ aside section { border-bottom: 1px solid var(--line); }
 .draft-note p { white-space:pre-wrap; overflow-wrap:anywhere; }
 .drafts label,.drafts textarea { display:block; margin:.6rem 0; }
 .drafts textarea { width:100%; min-height:6rem; font:inherit; color:var(--ink); background:var(--panel); border:1px solid var(--line); }
+.comment-preview { border-left:3px solid var(--line); padding:.4rem .8rem; margin:.5rem 0 1rem; max-height:20rem; overflow:auto; overflow-wrap:anywhere; }
+.comment-preview p { margin:.4rem 0; color:var(--ink); }
+.preview-toggle { font-size:.85rem; color:var(--muted); }
 .order { gap: .1rem; }
 .order button { padding: .15rem .35rem; border: 0; background: transparent; color: var(--muted); }
 @media (hover: hover) {

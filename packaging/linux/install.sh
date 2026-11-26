@@ -10,13 +10,16 @@ install -m644 ferriscope.svg "$icons/ferriscope.svg"
 install -m755 ferriscope "$bin/ferriscope"
 # Desktop launchers need an absolute path: their PATH often differs from zsh's.
 exec_path=$(printf '%s' "$bin/ferriscope" | sed 's/[\\`"$]/\\&/g; s/%/%%/g; s/\\/\\\\/g')
+# Use the installed image directly, even if the panel has stale icon-theme data.
+icon_path=$(printf '%s' "$icons/ferriscope.svg" | sed 's/\\/\\\\/g')
 cat > "$apps/ferriscope.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=Ferriscope
 Comment=Read and review GitHub pull requests
 Exec="$exec_path"
-Icon=ferriscope
+Icon=$icon_path
+StartupWMClass=ferriscope
 Terminal=false
 Categories=Development;
 EOF

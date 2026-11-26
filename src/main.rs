@@ -1,6 +1,9 @@
 mod comments;
 mod diff;
 mod platform;
+mod updates;
+#[cfg(not(target_arch = "wasm32"))]
+mod preview;
 use dioxus::prelude::*;
 use ferriscope::{File, Review, hash, kind, pr_key};
 use std::collections::{HashMap, HashSet};
@@ -91,6 +94,7 @@ fn App() -> Element {
                     }
                 }
             }
+            updates::UpdateCheck {}
         }
         }
     }
@@ -292,7 +296,7 @@ fn Reader(pr: String, head: String, files: Rc<Vec<File>>, initial: Review, dark:
                     button {disabled:previous.is_none(),onclick:move |_|if let Some(p)=previous{jump.call(p)}, "Previous " kbd {"K"}}
                     button {disabled:next.is_none(),onclick:move |_|if let Some(p)=next{jump.call(p)}, "Next " kbd {"J"}}
                 }
-                {draft_tray(pr.clone(),head,anchor)}
+                {draft_tray(pr.clone(),head,anchor,dark)}
                 if let Some(f)=active().and_then(|i|files.get(i)){
                     small {"UNIFIED DIFF · {f.change_type()}"} h2 {"{f.filename}"}
                     div {class:"tools",onkeydown:keep_native_space,
@@ -323,9 +327,9 @@ fn keep_native_space(e: KeyboardEvent) {
 fn focus_reader() {
     document::eval("document.querySelector('main')?.focus({preventScroll:true})");
 }
-fn draft_tray(_pr: String, _head: String, _anchor: Signal<Option<comments::Anchor>>) -> Element {
+fn draft_tray(_pr: String, _head: String, _anchor: Signal<Option<comments::Anchor>>, _dark:bool) -> Element {
     #[cfg(not(target_arch = "wasm32"))]
-    return rsx! {comments::desktop::Tray {pr:_pr,head:_head,anchor:_anchor}};
+    return rsx! {comments::desktop::Tray {pr:_pr,head:_head,anchor:_anchor,dark:_dark}};
     #[cfg(target_arch = "wasm32")]
     rsx! {}
 }

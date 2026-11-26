@@ -2,8 +2,12 @@ use dioxus::prelude::*;
 use std::sync::LazyLock;
 use syntect::{easy::HighlightLines, highlighting::ThemeSet, parsing::SyntaxSet};
 
-static SYNTAX: LazyLock<SyntaxSet> = LazyLock::new(two_face::syntax::extra_newlines);
+pub(crate) static SYNTAX: LazyLock<SyntaxSet> = LazyLock::new(two_face::syntax::extra_newlines);
 static THEMES: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
+
+pub(crate) fn theme(dark:bool)->&'static syntect::highlighting::Theme {
+    &THEMES.themes[if dark {"base16-ocean.dark"}else{"InspiredGitHub"}]
+}
 
 #[component]
 pub fn Diff(
@@ -23,11 +27,7 @@ pub fn Diff(
         .next()
         .unwrap_or("");
     let syntax = SYNTAX.find_syntax_by_extension(ext);
-    let theme = &THEMES.themes[if dark {
-        "base16-ocean.dark"
-    } else {
-        "InspiredGitHub"
-    }];
+    let theme = theme(dark);
     let fresh = || syntax.map(|s| HighlightLines::new(s, theme));
     let (mut old, mut new) = (fresh(), fresh());
     let mut rows = Vec::new();

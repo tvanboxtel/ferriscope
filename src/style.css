@@ -28,7 +28,9 @@
   --page: #1b1724; --panel: #282331; --header: #30213e; --subtle: #3b3248;
   --line: #4b3f5b; --muted: #c2b6ce; --teal: #d5acf6; --hover: #40354a; --selected: #493650;
 }
-.preferences { padding: 0 1.5rem .65rem; color: var(--muted); font-size: .82rem; }
+.preferences { display:flex; align-items:center; gap:.75rem; flex-wrap:wrap; padding: 0 1.5rem .65rem; color: var(--muted); font-size: .82rem; }
+.preferences .update-check { padding:.2rem .45rem; font-size:inherit; }
+.preferences a { color:var(--teal); }
 .preferences details { position: relative; width: fit-content; }
 .preferences summary { cursor: pointer; padding: .2rem 0; }
 .preferences fieldset {

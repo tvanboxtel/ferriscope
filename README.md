@@ -91,6 +91,8 @@ Open [localhost:8080](http://127.0.0.1:8080), then paste a **public** PR URL ins
 
 ## At the keyboard
 
+On desktop, **Check for updates** next to **Appearance** compares your installed version with the latest GitHub release. If a newer release exists, choose **View release** for its downloads. The check runs only when clicked; it never installs software or checks for unreleased commits.
+
 | Key | Action |
 | --- | --- |
 | `/` | Search all changed file paths, including collapsed groups |

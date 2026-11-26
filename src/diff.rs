@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
 use std::sync::LazyLock;
+use std::{cell::RefCell, collections::VecDeque, rc::Rc};
 use syntect::{easy::HighlightLines, highlighting::ThemeSet, parsing::SyntaxSet};
 
 pub(crate) static SYNTAX: LazyLock<SyntaxSet> = LazyLock::new(two_face::syntax::extra_newlines);
@@ -13,20 +14,112 @@ pub(crate) fn theme(dark: bool) -> &'static syntect::highlighting::Theme {
     }]
 }
 
-#[component]
-pub fn Diff(
+/// Syntect compiles grammar regexes on the first real line. Warm one likely
+/// grammar, not an entire speculative diff. Actual rendering starts afresh.
+pub async fn prepare_first(files: &[ferriscope::File], dark: bool) {
+    use std::sync::Once;
+    static WARM: Once = Once::new();
+    if WARM.is_completed() {
+        return;
+    }
+    let Some(file) = files
+        .iter()
+        .find(|f| f.patch().is_some() && ferriscope::kind(&f.filename) == "Implementation")
+    else {
+        return;
+    };
+    let ext = std::path::Path::new(&file.filename)
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_owned();
+    let patch = file.patch().unwrap();
+    // Bound even the scan for newlines: a minified source file might be one
+    // huge line. Never try to warm its grammar using the entire line.
+    let sample = patch[..patch.floor_char_boundary(patch.len().min(2048))].to_owned();
+    let warm = move || {
+        WARM.call_once(|| {
+            let Some(syntax) = SYNTAX.find_syntax_by_extension(&ext) else {
+                return;
+            };
+            let mut highlighter = HighlightLines::new(syntax, theme(dark));
+            for line in sample.split_inclusive('\n').take(4) {
+                if line.len() <= 512 && line.starts_with(['+', '-', ' ']) {
+                    let _ = highlighter.highlight_line(&line[1..], &SYNTAX);
+                }
+            }
+        })
+    };
+    #[cfg(target_arch = "wasm32")]
+    {
+        // Yield a task so the outstanding network request actually starts
+        // before synchronous JS/WASM grammar initialization.
+        gloo_timers::future::TimeoutFuture::new(8).await;
+        warm();
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = tokio::task::spawn_blocking(warm).await;
+}
+
+const BATCH: usize = 250;
+
+// Only retain offsets and colors, never UI nodes, handlers or duplicate patch text.
+struct Token {
+    len: usize,
+    rgb: [u8; 3],
+}
+struct Row {
+    len: usize,
+    class: &'static str,
+    coord: Option<(&'static str, u32)>,
+    tokens: Vec<Token>,
+}
+struct Page {
+    rows: Vec<Row>,
+    more: bool,
+}
+struct Entry {
+    patch: Rc<str>,
     path: String,
-    patch: std::rc::Rc<str>,
     dark: bool,
-    oncomment: EventHandler<crate::comments::Anchor>,
-    editing: bool,
-) -> Element {
-    const BATCH: usize = 250;
-    let mut limit = use_signal(|| BATCH);
+    page: Rc<Page>,
+}
+#[derive(Default)]
+pub struct HighlightCache(VecDeque<Entry>);
+impl HighlightCache {
+    fn page(&mut self, path: &str, patch: &Rc<str>, dark: bool, limit: usize) -> Rc<Page> {
+        if limit == BATCH
+            && let Some(i) = self
+                .0
+                .iter()
+                .position(|e| e.dark == dark && e.path == path && Rc::ptr_eq(&e.patch, patch))
+        {
+            let hit = self.0.remove(i).unwrap();
+            let page = Rc::clone(&hit.page);
+            self.0.push_front(hit);
+            return page;
+        }
+        let page = Rc::new(highlight(path, patch, dark, limit));
+        // Bound the retained token buffers even for minified or generated files.
+        if limit == BATCH && page.rows.iter().map(|r| r.tokens.capacity()).sum::<usize>() <= 16_384
+        {
+            self.0.push_front(Entry {
+                patch: Rc::clone(patch),
+                path: path.into(),
+                dark,
+                page: Rc::clone(&page),
+            });
+            self.0.truncate(8);
+        }
+        page
+    }
+}
+
+fn highlight(path: &str, patch: &str, dark: bool, limit: usize) -> Page {
     let ext = path
         .rsplit('/')
         .next()
-        .unwrap_or(&path)
+        .unwrap_or(path)
         .rsplit('.')
         .next()
         .unwrap_or("");
@@ -37,8 +130,8 @@ pub fn Diff(
     let mut rows = Vec::new();
     let mut lines = patch
         .split_inclusive('\n')
-        .zip(crate::comments::coordinates(&patch));
-    for (line, coord) in lines.by_ref().take(limit()) {
+        .zip(crate::comments::coordinates(patch));
+    for (line, coord) in lines.by_ref().take(limit) {
         let (class, lane) = match line.as_bytes()[0] {
             b'+' => ("add", &mut new),
             b'-' => ("del", &mut old),
@@ -52,30 +145,74 @@ pub fn Diff(
                 if line.starts_with("@@") {
                     (old, new) = (fresh(), fresh());
                 }
-                rows.push(rsx! { div { class:"hunk", {line.trim_end_matches('\n')} } });
+                rows.push(Row {
+                    len: line.len(),
+                    class: "hunk",
+                    coord: None,
+                    tokens: vec![],
+                });
                 continue;
             }
         };
         let spans = lane
             .as_mut()
             .and_then(|h| h.highlight_line(&line[1..], &SYNTAX).ok());
-        rows.push(rsx! { div { class,
+        let tokens = spans
+            .into_iter()
+            .flatten()
+            .map(|(s, text)| Token {
+                len: text.len(),
+                rgb: [s.foreground.r, s.foreground.g, s.foreground.b],
+            })
+            .collect();
+        rows.push(Row {
+            len: line.len(),
+            class,
+            coord,
+            tokens,
+        });
+    }
+    Page {
+        rows,
+        more: lines.next().is_some(),
+    }
+}
+
+#[component]
+pub fn Diff(
+    path: String,
+    patch: Rc<str>,
+    dark: bool,
+    oncomment: EventHandler<crate::comments::Anchor>,
+    editing: bool,
+) -> Element {
+    let mut limit = use_signal(|| BATCH);
+    let cache = use_context::<Rc<RefCell<HighlightCache>>>();
+    let page = cache.borrow_mut().page(&path, &patch, dark, limit());
+    let mut offset = 0;
+    let mut rows = Vec::with_capacity(page.rows.len());
+    for row in &page.rows {
+        let line = &patch[offset..offset + row.len];
+        offset += row.len;
+        let mut tokens = line.get(1..).unwrap_or("");
+        rows.push(rsx! { div { class:row.class,
             if cfg!(not(target_arch="wasm32")) {
-                if let Some((side,n))=coord{
+                if let Some((side,n))=row.coord{
                     button {class:"line-comment",disabled:editing,title:"Draft a comment on {side} line {n}",onkeydown:crate::keep_native_space,
                         onclick:{let path=path.clone();move |_|oncomment.call(crate::comments::Anchor{path:path.clone(),side:side.into(),line:n})},"{n} +"}
                 }
             }
-            if let Some(tokens) = spans {
+            if !row.tokens.is_empty() {
                 {&line[..1]}
-                for (style,text) in tokens {
-                    span { style:"color:rgb({style.foreground.r},{style.foreground.g},{style.foreground.b})", {text.trim_end_matches('\n')} }
+                for token in &row.tokens {
+                    {let (text,rest)=tokens.split_at(token.len);tokens=rest;let [r,g,b]=token.rgb;
+                    rsx!{span { style:"color:rgb({r},{g},{b})", {text.trim_end_matches('\n')} }}}
                 }
             } else { {line.trim_end_matches('\n')} }
         }});
     }
     rsx! { pre { for row in rows { {row} } }
-        if lines.next().is_some(){
+        if page.more{
             button {onclick:move |_|limit+=BATCH,"Show more lines"}
         }
     }

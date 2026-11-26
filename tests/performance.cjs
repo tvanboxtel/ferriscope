@@ -6,11 +6,15 @@ const assert = require("node:assert/strict");
   const browser = await chromium.launch({ executablePath: process.env.CHROME });
   try {
     const page = await browser.newPage();
-    const files = Array.from({length: 600}, (_, i) => ({
+    const count = Number(process.env.FILES || 600);
+    assert.ok(Number.isInteger(count) && count >= 120 && count <= 3000);
+    const files = Array.from({length: count}, (_, i) => ({
       filename: `src/module_${i}.rs`, status: "added", sha: `blob${i}`,
       patch: i === 0 ? "@@ -0,0 +1,3000 @@\n" + Array.from({length:3000}, (_, n) => `+pub const VALUE_${n}: usize = ${n};`).join("\n") : "@@ -0,0 +1 @@\n+pub fn example() {}"
     }));
+    let requests=0;
     await page.route("https://api.github.com/repos/demo/perf/**", async route => {
+      requests++;
       const url = new URL(route.request().url());
       await new Promise(resolve => setTimeout(resolve, 100));
       const start = (Number(url.searchParams.get("page")) - 1) * 100;
@@ -30,13 +34,37 @@ const assert = require("node:assert/strict");
     await page.keyboard.press("j");
     await page.getByRole("heading",{name:"src/module_1.rs",exact:true}).waitFor();
     console.log(`Open: ${Math.round(opened-start)} ms; first large diff: ${Math.round(shown-opened)} ms (${rows} added rows mounted); next file: ${Math.round(performance.now()-shown)} ms`);
+    const beforeNavigation=requests, revisits=[];
+    for(let i=0;i<7;i++){
+      const start=performance.now();
+      await page.keyboard.press("k");
+      await page.locator("pre .add").nth(248).waitFor();
+      revisits.push(Math.round(performance.now()-start));
+      await page.keyboard.press("j");
+      await page.getByRole("heading",{name:"src/module_1.rs",exact:true}).waitFor();
+    }
+    assert.equal(requests,beforeNavigation);
+    console.log(`Return to highlighted large file (median of 7): ${revisits.sort((a,b)=>a-b)[3]} ms; zero additional API requests`);
     if (process.env.CHECK_BOUNDS) {
       assert.ok(rows <= 250);
       assert.ok(await page.getByRole("checkbox").count() <= 60);
       const search=page.getByRole("searchbox",{name:"Search files"});
-      await search.fill("module_599.rs");
+      const last = files[count - 1].filename;
+      const filtering = performance.now();
+      await search.fill(last);
+      await page.getByRole("button", {name:new RegExp(`^${last}`)}).waitFor();
+      const jumping = performance.now();
       await search.press("Enter");
-      await page.getByRole("heading",{name:"src/module_599.rs",exact:true}).waitFor();
+      await page.getByRole("heading",{name:last,exact:true}).waitFor();
+      const jumped = performance.now();
+      const mounted = await page.getByRole("checkbox").count();
+      assert.ok(mounted <= 60, "a deep jump must not mount every preceding file");
+      const marking = performance.now();
+      await page.keyboard.press("Space");
+      await page.getByRole("button",{name:/Mark unread/}).waitFor();
+      console.log(`Search: ${Math.round(jumping-filtering)} ms; jump to file ${count}: ${Math.round(jumped-jumping)} ms (${mounted} file rows); mark reviewed: ${Math.round(performance.now()-marking)} ms`);
+      await page.getByRole("button",{name:"Previous files"}).click();
+      await page.getByLabel(`Select src/module_${(Math.ceil(count/60)-2)*60}.rs`,{exact:true}).waitFor();
       await page.reload();
       await page.getByLabel("GitHub PR URL").fill("https://github.com/demo/perf/pull/1");
       await page.getByText("Open / refresh").click();

@@ -130,6 +130,21 @@ fn escape_text(out: &mut String, s: &str) {
 mod tests {
     use super::*;
     #[test]
+    #[ignore = "performance measurement; run in release mode"]
+    fn measure_fenced_preview() {
+        let source = format!(
+            "Suggested fix:\n```rust\n{}\n```",
+            "let x = Some(42);\n".repeat(100)
+        );
+        for run in 1..=5 {
+            let start = std::time::Instant::now();
+            let html = render(&source, true);
+            let elapsed = start.elapsed();
+            assert!(html.contains("<span style="));
+            println!("100-line Markdown code preview render #{run}: {elapsed:?}");
+        }
+    }
+    #[test]
     fn preview_formats_markdown_and_code_without_active_content() {
         let input = "**Review** `x`\n\n![image](https://example.org/img) [link](javascript:alert)\n\n<img src=x onerror=alert(1)>\n\n```rust\nlet x = \"</code><script>\";\n```";
         let light = render(input, false);

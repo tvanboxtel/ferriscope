@@ -30,7 +30,7 @@ fn App() -> Element {
     let mut url = use_signal(String::new);
     let mut busy = use_signal(|| false);
     let mut error = use_signal(String::new);
-    let mut session = use_signal(|| None::<(String, String, Rc<Vec<File>>, Review)>);
+    let mut session = use_signal(|| None::<(platform::Snapshot, Review)>);
     let mut revision = use_signal(|| 0usize);
     let mut recents = use_signal(platform::load_recents);
     let mut show_recents = use_signal(|| false);
@@ -49,20 +49,28 @@ fn App() -> Element {
         url.set(input);
         show_recents.set(false);
         error.set(String::new());
+        let cached = session
+            .peek()
+            .as_ref()
+            .map(|(snapshot, _)| snapshot.clone());
+        let dark = theme.peek().as_str() != "light";
         spawn(async move {
             let result = async {
-                let (head, files) = platform::fetch(&key).await?;
+                let snapshot = platform::fetch(&key, cached, async |files| {
+                    diff::prepare_first(files, dark).await
+                })
+                .await?;
                 let mut review = platform::load(&key)?;
-                review.reconcile(&files);
+                review.reconcile(&snapshot.files);
                 platform::save(&key, &review)?;
-                Ok::<_, String>((key, head, Rc::new(files), review))
+                Ok::<_, String>((snapshot, review))
             }
             .await;
             match result {
                 Ok(s) => {
                     let mut list = recents();
-                    list.retain(|key| key != &s.0);
-                    list.insert(0, s.0.clone());
+                    list.retain(|key| key != &s.0.key);
+                    list.insert(0, s.0.key.clone());
                     list.truncate(10);
                     if let Err(e) = platform::save_recents(&list) {
                         error.set(format!("Could not save recent PRs: {e}"))
@@ -99,8 +107,8 @@ fn App() -> Element {
             }
         }
         if !error.read().is_empty(){p {role:"alert","{error}"}}
-        if let Some((pr,head,files,review))=session.read().as_ref(){
-            Reader {key:"{revision}",pr:pr.clone(),head:head.clone(), files:files.clone(),initial:review.clone(),dark:theme.read().as_str()!="light"}
+        if let Some((snapshot,review))=session.read().as_ref(){
+            Reader {key:"{revision}",pr:snapshot.key.clone(),head:snapshot.head().to_owned(), files:snapshot.files.clone(),initial:review.clone(),dark:theme.read().as_str()!="light"}
         }else{section {class:"intro",small {"PERSONAL REVIEW WORKSPACE"} h1 {"Read changes by purpose."} p {"Paste a pull request above to explore its files, bring related changes together, and keep track of what you’ve reviewed."}}}
         }
     }
@@ -132,20 +140,23 @@ fn Appearance(mut theme: Signal<String>, mut error: Signal<String>) -> Element {
 
 #[component]
 fn Reader(pr: String, head: String, files: Rc<Vec<File>>, initial: Review, dark: bool) -> Element {
+    use_context_provider(|| Rc::new(std::cell::RefCell::new(diff::HighlightCache::default())));
     let mut state = use_signal(|| initial.clone());
     let index = use_hook(|| {
-        files
-            .iter()
-            .enumerate()
-            .map(|(i, f)| (f.filename.clone(), i))
-            .collect::<HashMap<_, _>>()
+        Rc::new(
+            files
+                .iter()
+                .enumerate()
+                .map(|(i, f)| (f.filename.clone(), i))
+                .collect::<HashMap<_, _>>(),
+        )
     });
     let mut active = use_signal(|| None::<usize>);
     let mut folders = use_signal(HashSet::<(String, String)>::new);
     // An expanded kind can contain thousands of files. Keep its full logical
     // order for keyboard navigation, but mount the sidebar in small batches.
     const FILE_BATCH: usize = 60;
-    let mut visible = use_signal(HashMap::<String, usize>::new);
+    let mut pages = use_signal(HashMap::<String, usize>::new);
     let mut query = use_signal(String::new);
     let mut search_limit = use_signal(|| FILE_BATCH);
     let paths = use_hook(|| {
@@ -177,7 +188,8 @@ fn Reader(pr: String, head: String, files: Rc<Vec<File>>, initial: Review, dark:
             Err(e) => error.set(e),
         },
     );
-    let groups = state.read().groups.clone();
+    let review = state.read();
+    let groups = &review.groups;
     let toggle = use_callback({
         let snapshot = Rc::clone(&files);
         move |()| {
@@ -219,16 +231,9 @@ fn Reader(pr: String, head: String, files: Rc<Vec<File>>, initial: Review, dark:
         let review = state.read();
         let group = &review.groups[g];
         expanded.write().insert(group.name.clone());
-        if fi
-            >= visible
-                .read()
-                .get(&group.name)
-                .copied()
-                .unwrap_or(FILE_BATCH)
-        {
-            visible
-                .write()
-                .insert(group.name.clone(), (fi / FILE_BATCH + 1) * FILE_BATCH);
+        let page = fi / FILE_BATCH;
+        if pages.read().get(&group.name).copied().unwrap_or(0) != page {
+            pages.write().insert(group.name.clone(), page);
         }
         let path = &group.files[fi];
         folders
@@ -294,15 +299,21 @@ fn Reader(pr: String, head: String, files: Rc<Vec<File>>, initial: Review, dark:
                                     onclick:{let name=g.name.clone();let files=Rc::clone(&files);move |_|{
                                         let mut s=state();
                                         match s.remove_group(&name,&files){
-                                            Ok(())=>{save.call(s);expanded.write().remove(&name);visible.write().remove(&name);}
+                                            Ok(())=>{save.call(s);expanded.write().remove(&name);pages.write().remove(&name);}
                                             Err(e)=>error.set(e),
                                         }
                                     }},"Ungroup"}
                             }
                         }
                         if expanded.read().contains(&g.name){
-                            for (fi,path) in g.files.iter().take(visible.read().get(&g.name).copied().unwrap_or(FILE_BATCH)).enumerate(){
-                                if !g.custom && (fi==0 || directory(&g.files[fi-1])!=directory(path)){
+                            {let page=pages.read().get(&g.name).copied().unwrap_or(0).min(g.files.len().saturating_sub(1)/FILE_BATCH);
+                             let start=page*FILE_BATCH;
+                             rsx!{
+                            if page>0{
+                                button {onclick:{let name=g.name.clone();move |_|{pages.write().insert(name.clone(),page-1);}},"Previous files"}
+                            }
+                            for (fi,path) in g.files.iter().enumerate().skip(start).take(FILE_BATCH){
+                                if !g.custom && (fi==start || directory(&g.files[fi-1])!=directory(path)){
                                     button {class:"folder",aria_expanded:!folders.read().contains(&(g.name.clone(),directory(path).into())),onclick:{
                                         let k=(g.name.clone(),directory(path).to_owned());move |_|{let mut set=folders.write();if !set.remove(&k){set.insert(k.clone());}}
                                     },span {class:"chevron",aria_hidden:"true","›"} "{directory(path)} /"}
@@ -322,9 +333,10 @@ fn Reader(pr: String, head: String, files: Rc<Vec<File>>, initial: Review, dark:
                                 }
                                 }
                             }
-                            if g.files.len()>visible.read().get(&g.name).copied().unwrap_or(FILE_BATCH){
-                                button {onclick:{let name=g.name.clone();move |_|*visible.write().entry(name.clone()).or_insert(FILE_BATCH)+=FILE_BATCH},"Show more files"}
+                            if g.files.len()>start+FILE_BATCH{
+                                button {onclick:{let name=g.name.clone();move |_|{pages.write().insert(name.clone(),page+1);}},"Show more files"}
                             }
+                            }}
                         }
                     }
                 }

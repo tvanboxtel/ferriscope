@@ -1807,6 +1807,7 @@ dependencies = [
  "futures-lite",
  "futures-util",
  "gloo-net",
+ "gloo-timers",
  "pulldown-cmark",
  "semver",
  "serde",

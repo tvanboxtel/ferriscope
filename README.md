@@ -101,4 +101,8 @@ CHECK_BOUNDS=1 node tests/performance.cjs
 
 The workflow test uses `tests/mixed.json`; set `LIVE=1` to also open a real public PR. The performance check uses 600 files, a 3,000-line Rust patch, and 100 ms simulated latency per request.
 
+To profile an everyday PR, run `CHECK_CACHE=1 node tests/everyday.cjs` against the release web build. It reports five fresh-tab trials for opening six files, showing a highlighted 24-line diff, and refreshing. Only the current PR’s verified patches are reused, in memory, after checking its base SHA, head SHA, and file count with GitHub.
+
+For a release-mode stress test, serve the web app with `--release` and run `FILES=3000 CHECK_BOUNDS=1 node tests/performance.cjs`. It times opening, diff navigation, path search, jumping to the final file, and marking it reviewed. It also checks the number of rendered rows; timing alone varies by machine. To measure the native comment preview separately, run `cargo test --release --locked --features desktop measure_fenced_preview -- --ignored --nocapture`.
+
 </details>

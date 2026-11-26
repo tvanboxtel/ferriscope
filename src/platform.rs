@@ -1,6 +1,7 @@
 use ferriscope::{File, Review};
 use futures_util::{StreamExt, TryStreamExt, stream};
 use serde::Deserialize;
+use std::rc::Rc;
 
 #[cfg(target_arch = "wasm32")]
 async fn request(path: &str) -> Result<String, String> {
@@ -30,20 +31,41 @@ async fn request(path: &str) -> Result<String, String> {
     String::from_utf8(r.stdout).map_err(|e| e.to_string())
 }
 
-#[derive(Deserialize, PartialEq)]
+#[derive(Clone, Deserialize, PartialEq)]
 struct Ref {
     sha: String,
 }
-#[derive(Deserialize, PartialEq)]
+#[derive(Clone, Deserialize, PartialEq)]
 struct Meta {
     head: Ref,
     base: Ref,
     changed_files: usize,
 }
-pub async fn fetch(key: &str) -> Result<(String, Vec<File>), String> {
+#[derive(Clone)]
+pub struct Snapshot {
+    pub key: String,
+    meta: Meta,
+    pub files: Rc<Vec<File>>,
+}
+impl Snapshot {
+    pub fn head(&self) -> &str {
+        &self.meta.head.sha
+    }
+}
+pub async fn fetch(
+    key: &str,
+    cached: Option<Snapshot>,
+    prepare: impl AsyncFnOnce(&[File]),
+) -> Result<Snapshot, String> {
     let api = format!("repos/{}", key.replace("/pull/", "/pulls/"));
     let parse = |s: &str| serde_json::from_str::<Meta>(s).map_err(|e| e.to_string());
     let meta = parse(&request(&api).await?)?;
+    if let Some(previous) = cached
+        && previous.key == key
+        && previous.meta == meta
+    {
+        return Ok(previous);
+    }
     if meta.changed_files > 3000 {
         return Err("GitHub's files API is limited to 3,000 files per PR.".into());
     }
@@ -65,10 +87,17 @@ pub async fn fetch(key: &str) -> Result<(String, Vec<File>), String> {
             },
         )
         .await?;
-    if files.len() != meta.changed_files || parse(&request(&api).await?)? != meta {
+    // Start the verification request before doing local preparation. No
+    // unverified snapshot is exposed to the reader or saved to disk.
+    let (verified, ()) = futures_util::join!(request(&api), prepare(&files));
+    if files.len() != meta.changed_files || parse(&verified?)? != meta {
         return Err("The PR changed while loading. Try refreshing.".into());
     }
-    Ok((meta.head.sha, files))
+    Ok(Snapshot {
+        key: key.into(),
+        meta,
+        files: Rc::new(files),
+    })
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -89,6 +118,34 @@ mod store {
             .map_err(|_| "Cannot save browser progress (storage full or disabled)".into())
     }
 }
+#[cfg(all(test, not(target_arch = "wasm32")))]
+#[test]
+#[ignore = "live read-only GitHub timing; requires gh auth"]
+fn measure_small_pr_fetch() {
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let key = "tvanboxtel/ferriscope/pull/1";
+        let start = std::time::Instant::now();
+        let snapshot = fetch(key, None, async |files| {
+            crate::diff::prepare_first(files, false).await
+        })
+        .await
+        .unwrap();
+        let opened = start.elapsed();
+        let refreshed = std::time::Instant::now();
+        let next = fetch(key, Some(snapshot.clone()), async |files| {
+            crate::diff::prepare_first(files, false).await
+        })
+        .await
+        .unwrap();
+        println!(
+            "{} files: initial fetch {opened:?}; refresh {:?}; reused snapshot: {}",
+            next.files.len(),
+            refreshed.elapsed(),
+            Rc::ptr_eq(&snapshot.files, &next.files)
+        );
+    });
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod store {
     use std::{fs, io::Write, path::PathBuf};

@@ -1,6 +1,23 @@
 use ferriscope::*;
 
 #[test]
+fn line_counts_use_github_totals_even_without_a_patch() {
+    let file = |counts: serde_json::Value| {
+        let mut json = serde_json::json!({"filename":"large.rs","status":"modified","sha":"same"});
+        json.as_object_mut()
+            .unwrap()
+            .extend(counts.as_object().unwrap().clone());
+        serde_json::from_value::<File>(json).unwrap()
+    };
+    let with_counts = file(serde_json::json!({"additions": 712, "deletions": 101}));
+    let without_counts = file(serde_json::json!({}));
+    assert!(with_counts.patch().is_none());
+    assert_eq!(with_counts.line_changes(), Some((712, 101)));
+    assert_eq!(without_counts.line_changes(), None);
+    assert_eq!(with_counts.fingerprint(), without_counts.fingerprint());
+}
+
+#[test]
 fn reopen_then_refresh_only_the_test() {
     let mut files: Vec<File> = serde_json::from_str(include_str!("mixed.json")).unwrap();
     let mut state = Review::default();

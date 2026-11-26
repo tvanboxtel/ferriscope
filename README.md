@@ -43,7 +43,7 @@ The installer registers the launcher and icon and places the executable at `~/.l
 - **Find a file:** press `/` to search every changed path, including collapsed groups. **Enter** opens the first match; **Esc** returns to the tree.
 - **Read related changes together:** select files with their checkboxes, name the group, and click **Review together**. Use the arrows to reorder. **Ungroup** removes a custom group and returns its files to their default groups without losing review progress.
 - **Keep your place:** **J / K** move forward and back; **Space** marks the current file reviewed or unread. **Recent PRs** reopens work on this device. After a push, only reviewed files whose diff changed need another look.
-- **Send feedback:** draft inline comments with the numbered `+` beside a line. Above the diff, choose **Approve**, **Request changes**, or **Post comments**. All saved inline comments are included; review the summary and confirm to publish on GitHub. Marking a file reviewed does *not* submit a review. GitHub doesn’t allow approving or requesting changes on your own PR.
+- **Send feedback:** click the numbered `+` beside a line to draft a comment in the pane below the diff. From that pane, choose **Approve**, **Request changes**, or **Post comments** when you’re ready. All saved inline comments are included; review the summary and confirm to publish on GitHub. Marking a file reviewed does *not* submit a review. GitHub doesn’t allow approving or requesting changes on your own PR.
 
 The **Ferriscope ▾** menu holds appearance settings and the desktop release checker. **Check for updates** links to newer releases; it doesn’t replace the running app.
 

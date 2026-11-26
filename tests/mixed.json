@@ -1,8 +1,8 @@
 [
-  {"filename":"Cargo.lock","status":"modified","sha":"a","patch":"@@ -1 +1 @@\n-old\n+new"},
-  {"filename":"src/accounts.rs","status":"added","sha":"b","patch":"@@ -0,0 +1 @@\n+fn delete_account() {}"},
-  {"filename":"tests/accounts.rs","status":"added","sha":"c","patch":"@@ -0,0 +1 @@\n+#[test] fn deletes_account() {}"},
-  {"filename":"migrations/drop.sql","status":"added","sha":"d","patch":"@@ -0,0 +1 @@\n+DROP TABLE legacy;"},
-  {"filename":"docs/accounts.md","status":"added","sha":"e","patch":"@@ -0,0 +1 @@\n+# Account deletion"},
-  {"filename":"images/icon.png","status":"modified","sha":"f"}
+  {"filename":"Cargo.lock","status":"modified","sha":"a","additions":1,"deletions":1,"patch":"@@ -1 +1 @@\n-old\n+new"},
+  {"filename":"src/accounts.rs","status":"added","sha":"b","additions":1,"deletions":0,"patch":"@@ -0,0 +1 @@\n+fn delete_account() {}"},
+  {"filename":"tests/accounts.rs","status":"added","sha":"c","additions":1,"deletions":0,"patch":"@@ -0,0 +1 @@\n+#[test] fn deletes_account() {}"},
+  {"filename":"migrations/drop.sql","status":"added","sha":"d","additions":1,"deletions":0,"patch":"@@ -0,0 +1 @@\n+DROP TABLE legacy;"},
+  {"filename":"docs/accounts.md","status":"added","sha":"e","additions":1,"deletions":0,"patch":"@@ -0,0 +1 @@\n+# Account deletion"},
+  {"filename":"images/icon.png","status":"modified","sha":"f","additions":0,"deletions":0}
 ]

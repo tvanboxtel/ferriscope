@@ -21,9 +21,14 @@ async function run() {
       assert.match(await page.locator("article pre").innerText(), /@@/);
     }
     const url = "https://github.com/demo/repo/pull/2";
+    let longDiff = false;
     await page.route("https://api.github.com/repos/demo/repo/**", route =>
       route.fulfill({ json: route.request().url().includes("/files?")
-        ? files : { base: { sha: "base" }, head: { sha: files[2].sha }, changed_files: files.length } }));
+        ? (longDiff ? files.map((file, i) => i === 1 ? {
+          ...file, sha: "long", additions: 140, patch: "@@ -0,0 +1,140 @@\n" +
+            Array.from({length:140}, (_, n) => `+let row_${n} = ${n};`).join("\n"),
+        } : file) : files)
+        : { base: { sha: "base" }, head: { sha: longDiff ? "long" : files[2].sha }, changed_files: files.length } }));
     await open(url, "demo/repo/pull/2");
     assert.equal(await page.getByLabel("Select Cargo.lock").count(), 0);
     await page.keyboard.press("/");
@@ -31,20 +36,27 @@ async function run() {
     await search.fill("MISSING/j k");
     await page.getByText(/No files match/).waitFor();
     await search.fill("CARGO.LOCK");
-    await page.getByRole("button",{name:/Cargo.lock/}).waitFor();
+    const lockResult = page.getByRole("button", {name: /^Cargo.lock/});
+    const lockCounts = lockResult.getByRole("img", {name:"Lines added: 1; lines removed: 1"});
+    assert.equal(await lockCounts.locator(".lines-added").innerText(), "+1");
+    assert.equal(await lockCounts.locator(".lines-removed").innerText(), "−1");
     await search.press("Escape");
     assert.equal(await page.getByLabel("Select Cargo.lock").count(), 0);
     await page.keyboard.press("j");
     await page.getByRole("heading", {name:"src/accounts.rs"}).waitFor();
+    const counts = {name:"Lines added: 1; lines removed: 0"};
+    await page.locator("article").getByRole("img", counts).waitFor();
+    await page.getByRole("button", {name:/^src\/accounts.rs/}).getByRole("img", counts).waitFor();
     assert.match(await page.locator("pre .add").innerText(), /^\+fn delete_account\(\) \{\}$/);
     assert.ok(await page.locator("pre .add span[style]").count() > 1);
     const token = page.locator("pre .add span[style]").first();
     const lightColor = await token.evaluate(el => getComputedStyle(el).color);
     const settings = page.getByLabel("Ferriscope settings");
     await settings.click();
-    const panel = await page.getByRole("group", {name:"Color theme"}).boundingBox();
-    const trigger = await page.locator(".preferences summary").boundingBox();
-    assert.ok(panel.y >= trigger.y + trigger.height &&
+    const panel = await page.locator(".settings-panel").boundingBox();
+    const header = await page.locator("header").boundingBox();
+    const title = await page.getByText("Color theme", {exact:true}).boundingBox();
+    assert.ok(panel.y >= header.y + header.height && title.y >= panel.y &&
       panel.y + panel.height <= page.viewportSize().height, "Themes should open below the app menu, in view");
     await page.getByRole("radio", {name:"Dark",exact:true}).check();
     await page.waitForFunction(color => getComputedStyle(document.querySelector("pre .add span")).color !== color, lightColor);
@@ -106,6 +118,21 @@ async function run() {
     await page.getByText("Implementation · Reviewed",{exact:true}).waitFor();
     await page.getByRole("button",{name:/^Tests/}).click();
     await page.getByText("Tests · Changed",{exact:true}).waitFor();
+    longDiff = true;
+    await page.getByText("Open / refresh").click();
+    await page.locator("article .empty").waitFor();
+    await page.locator("main").press("j");
+    const diff = page.locator(".diff-scroll");
+    const fileHeading = page.locator(".file-heading");
+    await fileHeading.getByRole("img", {name:"Lines added: 140; lines removed: 0"}).waitFor();
+    for (const width of [1100, 640]) {
+      await page.setViewportSize({width, height:720});
+      await diff.evaluate(el => { el.scrollTop = 0; });
+      const before = await fileHeading.boundingBox();
+      await diff.evaluate(el => { el.scrollTop = el.scrollHeight; });
+      assert.ok(await diff.evaluate(el => el.scrollTop) > 0, "Long diff should scroll inside its pane");
+      assert.deepEqual(await fileHeading.boundingBox(), before, "File heading and actions should not move with the diff");
+    }
     console.log("Browser review workflow passed");
   } finally {
     await browser.close();

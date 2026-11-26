@@ -7,6 +7,14 @@ pub struct Anchor {
     pub line: u32,
 }
 
+pub(crate) fn line_label(side: &str, line: u32) -> String {
+    match side {
+        "LEFT" => format!("Line {line} (old version)"),
+        "RIGHT" => format!("Line {line} (new version)"),
+        _ => format!("Line {line}"),
+    }
+}
+
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 #[cfg(not(target_arch = "wasm32"))]
 pub struct Note {
@@ -228,6 +236,12 @@ esac"#).unwrap();
     fn maps_hunks_and_no_newline_marker() {
         assert_eq!(coordinates("@@ -4,2 +8,2 @@ fn a\n-old\n\\ No newline at end of file\n+new\n same\n@@ -0,0 +15 @@\n+more").collect::<Vec<_>>(),[None,Some(("LEFT",4)),None,Some(("RIGHT",8)),Some(("RIGHT",9)),None,Some(("RIGHT",15))]);
     }
+    #[test]
+    fn labels_lines_by_file_version() {
+        assert_eq!(line_label("LEFT", 4), "Line 4 (old version)");
+        assert_eq!(line_label("RIGHT", 23), "Line 23 (new version)");
+    }
+
     #[component]
     pub fn Tray(
         pr: String,
@@ -272,50 +286,59 @@ esac"#).unwrap();
         let target = anchor();
         let notes = draft.read().notes.clone();
         rsx! {
-            if !message.read().is_empty(){p {role:"status","{message}"}}
-            div {class:"review-actions",role:"group",aria_label:"GitHub review actions",onkeydown:crate::keep_native_space,
-                small {"PR REVIEW"}
-                for choice in [Outcome::Approve,Outcome::Changes,Outcome::Comment]{
-                    button {disabled:busy()||target.is_some(),aria_pressed:open()&&outcome()==choice,
-                        onclick:move |_|{outcome.set(choice);open.set(true);},
-                        "{choice.label()}" if choice==Outcome::Comment {span {class:"count","{notes.len()}"}}
-                    }
-                }
-            }
-            if open() || target.is_some(){
-                section {class:"drafts",onkeydown:move|e|e.stop_propagation(),
-                    if target.is_some(){strong {"Draft inline comment"}}
-                    if stale {p {"These notes refer to an older revision. Copy their text, remove them, then select lines in the new diff."}}
-                    if !notes.is_empty(){details {open:stale,
-                        summary {"Included inline comments ({notes.len()})"}
-                        for (i,n) in notes.iter().enumerate(){div {class:"draft-note",
-                        b {"{n.anchor.path} · {n.anchor.side} {n.anchor.line}"} p {"{n.body}"}
-                        button {disabled:busy(),onclick:move |_|{let mut d=draft();d.notes.remove(i);persist.call(d);},"Remove"}
-                    }}}}
-                    if let Some(a)=target {
-                        crate::preview::Editor {label:format!("Comment on {} · {} {}",a.path,a.side,a.line),body:text,dark,focus:true}
-                        button {disabled:busy()||stale||!has_text()||loaded.is_err(),onclick:{
-                            let head=head.clone();move |_|{let mut d=draft();d.head=head.clone();d.notes.push(Note{anchor:a.clone(),body:text()});if persist.call(d){text.set(String::new());anchor.set(None)}}
-                        },"Save draft"}
-                        button {onclick:move |_|{text.set(String::new());anchor.set(None)},"Cancel"}
-                    }
-                    if anchor.read().is_none(){
-                        crate::preview::Editor {label:match outcome(){Outcome::Changes=>"What needs to change? (required)",Outcome::Approve=>"Approval note (optional)",Outcome::Comment if notes.is_empty()=>"Write a comment",Outcome::Comment=>"Summary (optional)"},body:summary,dark,disabled:busy()}
-                        div {class:"review-confirm",
-                        button {class:"publish-review",disabled:busy()||stale||loaded.is_err()||outcome().validate(!notes.is_empty(),has_summary()).is_err(),onclick:move |_|{
-                            if busy(){return}
-                            let gh=match crate::gh::executable(){Ok(gh)=>gh,Err(e)=>{message.set(e);return}};
-                            busy.set(true);let pr=pr.clone();let mut d=draft();if d.notes.is_empty(){d.head=head.clone()}let verdict=outcome();let body=summary();
-                            spawn(async move{match publish_with(&gh,&pr,&d,verdict,&body).await{
-                                Ok(())=>{summary.set(String::new());outcome.set(Outcome::Comment);open.set(false);if persist.call(Draft::default()){message.set("Review posted to GitHub.".into())}else{draft.set(Draft::default());message.set("Review posted, but the local draft could not be cleared. Do not resubmit it.".into())}},
-                                Err(e)=>message.set(e)
-                            }busy.set(false);});
-                        },if busy(){"Sending…"}else{match outcome(){Outcome::Approve=>"Approve on GitHub",Outcome::Changes=>"Request changes on GitHub",Outcome::Comment=>"Post to GitHub"}}}
-                        button {disabled:busy(),onclick:move |_|open.set(false),"Back to diff"}
+          footer {class:"review-tray",
+            if !message.read().is_empty(){p {class:"review-message",role:"status","{message}"}}
+            if target.is_none(){
+                div {class:"review-actions",role:"group",aria_label:"GitHub review actions",onkeydown:crate::keep_native_space,
+                    small {"PR REVIEW"}
+                    for choice in [Outcome::Approve,Outcome::Changes,Outcome::Comment]{
+                        button {disabled:busy(),aria_pressed:open()&&outcome()==choice,
+                            onclick:move |_|{outcome.set(choice);open.set(true);},
+                            "{choice.label()}" if choice==Outcome::Comment {span {class:"count","{notes.len()}"}}
                         }
                     }
                 }
             }
+            if open() || target.is_some(){
+                section {class:"drafts",aria_label:if target.is_some() {"Draft inline comment"}else{"Review summary"},onkeydown:move|e|e.stop_propagation(),
+                    div {class:"draft-fields",
+                        if target.is_some(){strong {"Draft inline comment"}}
+                        if stale {p {"These notes refer to an older revision. Copy their text, remove them, then select lines in the new diff."}}
+                        if !notes.is_empty(){details {open:stale,
+                            summary {"Included inline comments ({notes.len()})"}
+                            for (i,n) in notes.iter().enumerate(){div {class:"draft-note",
+                                b {"{n.anchor.path} · " {line_label(&n.anchor.side,n.anchor.line)}} p {"{n.body}"}
+                                button {disabled:busy(),onclick:move |_|{let mut d=draft();d.notes.remove(i);persist.call(d);},"Remove"}
+                            }}
+                        }}
+                        if let Some(a)=target.as_ref() {
+                            crate::preview::Editor {label:format!("{} · {}",line_label(&a.side,a.line),a.path),body:text,dark,focus:true}
+                        } else {
+                            crate::preview::Editor {label:match outcome(){Outcome::Changes=>"What needs to change? (required)",Outcome::Approve=>"Approval note (optional)",Outcome::Comment if notes.is_empty()=>"Write a comment",Outcome::Comment=>"Summary (optional)"},body:summary,dark,disabled:busy()}
+                        }
+                    }
+                    div {class:"review-confirm",
+                        if let Some(a)=target.as_ref() {
+                            button {disabled:busy()||stale||!has_text()||loaded.is_err(),onclick:{
+                                let (a,head)=(a.clone(),head.clone());move |_|{let mut d=draft();d.head=head.clone();d.notes.push(Note{anchor:a.clone(),body:text()});if persist.call(d){text.set(String::new());anchor.set(None);crate::focus_reader()}}
+                            },"Save draft"}
+                            button {onclick:move |_|{text.set(String::new());anchor.set(None);crate::focus_reader()},"Cancel"}
+                        } else {
+                            button {class:"publish-review",disabled:busy()||stale||loaded.is_err()||outcome().validate(!notes.is_empty(),has_summary()).is_err(),onclick:move |_|{
+                                if busy(){return}
+                                let gh=match crate::gh::executable(){Ok(gh)=>gh,Err(e)=>{message.set(e);return}};
+                                busy.set(true);let pr=pr.clone();let mut d=draft();if d.notes.is_empty(){d.head=head.clone()}let verdict=outcome();let body=summary();
+                                spawn(async move{match publish_with(&gh,&pr,&d,verdict,&body).await{
+                                    Ok(())=>{summary.set(String::new());outcome.set(Outcome::Comment);open.set(false);if persist.call(Draft::default()){message.set("Review posted to GitHub.".into())}else{draft.set(Draft::default());message.set("Review posted, but the local draft could not be cleared. Do not resubmit it.".into())}},
+                                    Err(e)=>message.set(e)
+                                }busy.set(false);});
+                            },if busy(){"Sending…"}else{match outcome(){Outcome::Approve=>"Approve on GitHub",Outcome::Changes=>"Request changes on GitHub",Outcome::Comment=>"Post to GitHub"}}}
+                            button {disabled:busy(),onclick:move |_|{open.set(false);crate::focus_reader()},"Back to diff"}
+                        }
+                    }
+                }
+            }
+          }
         }
     }
 }

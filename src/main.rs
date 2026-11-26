@@ -160,7 +160,9 @@ fn Appearance(mut theme: Signal<String>, mut error: Signal<String>) -> Element {
                     span {class:"mark",aria_hidden:"true",dangerous_inner_html:include_str!("../assets/ferriscope.svg")}
                     strong {"Ferriscope"} span {aria_hidden:"true","▾"}
                 }
-                fieldset {legend {"Color theme"}
+                div {class:"settings-panel",
+                    div {role:"group",aria_labelledby:"theme-title",
+                    strong {id:"theme-title","Color theme"}
                     for (id,label) in [("light","Light"),("dark","Dark"),("dusk","Dusk")] {
                         label {
                             input {r#type:"radio",name:"theme",checked:theme.read().as_str()==id,onchange:move |_|{
@@ -169,6 +171,7 @@ fn Appearance(mut theme: Signal<String>, mut error: Signal<String>) -> Element {
                             }}
                             "{label}"
                         }
+                    }
                     }
                     updates::UpdateCheck {}
                 }
@@ -209,8 +212,25 @@ fn Reader(pr: String, head: String, files: Rc<Vec<File>>, initial: Review, dark:
     use_effect(move || {
         let _ = active();
         document::eval(
-            "const pane = document.querySelector('article'); if (pane) pane.scrollTop = 0;",
+            "const diff = document.querySelector('.diff-scroll'); if (diff) diff.scrollTop = 0;",
         );
+    });
+    use_effect(move || {
+        if anchor.read().is_some() {
+            // A narrow window stacks the file list above the reader; bring the
+            // reader into view, then reveal the line without scrolling code sideways.
+            document::eval(
+                "const diff = document.querySelector('.diff-scroll');
+                 const line = diff?.querySelector('.comment-target');
+                 if (line) {
+                     diff.closest('.reader').scrollIntoView({block:'nearest', inline:'nearest'});
+                     const viewport = diff.getBoundingClientRect();
+                     const target = line.getBoundingClientRect();
+                     if (target.top < viewport.top) diff.scrollTop += target.top - viewport.top;
+                     else if (target.bottom > viewport.bottom) diff.scrollTop += target.bottom - viewport.bottom;
+                 }",
+            );
+        }
     });
     let mut selected = use_signal(HashSet::<String>::new);
     let mut name = use_signal(String::new);
@@ -284,6 +304,7 @@ fn Reader(pr: String, head: String, files: Rc<Vec<File>>, initial: Review, dark:
         query.set(String::new());
         jump.call(p)
     });
+    let file = active().and_then(|i| files.get(i));
     rsx! {
         main { tabindex:"-1",
             onmounted:move |e|async move{let _=e.set_focus(true).await;},
@@ -311,7 +332,13 @@ fn Reader(pr: String, head: String, files: Rc<Vec<File>>, initial: Review, dark:
                     small {role:"status","{matches.len()} matching files"}
                     if matches.is_empty(){p {"No files match this path. Try a shorter name or press Esc to clear."}}
                     for &(p,i) in matches.iter().take(search_limit()){
-                        button {class:"search-result",key:"{i}",onclick:move |_|choose.call(p),"{files[i].filename}" span {class:"badge","{kind(&files[i].filename)}"}}
+                        button {class:"search-result",key:"{i}",onclick:move |_|choose.call(p),
+                            "{files[i].filename}"
+                            span {class:"file-meta",
+                                span {class:"badge","{kind(&files[i].filename)}"}
+                                {line_counts(&files[i])}
+                            }
+                        }
                     }
                     if matches.len()>search_limit(){button {onclick:move |_|search_limit+=FILE_BATCH,"Show more matches"}}
                 }else{
@@ -362,9 +389,12 @@ fn Reader(pr: String, head: String, files: Rc<Vec<File>>, initial: Review, dark:
                                         input {r#type:"checkbox",aria_label:"Select {path}",checked:selected.read().contains(path),onchange:{
                                             let p=path.clone();move |_|{let mut set=selected.write();if !set.remove(&p){set.insert(p.clone());}}
                                         }}
-                                        button {class:"label",aria_label:"{path}",title:"{path}",onclick:move |_|{active.set(Some(idx));focus_reader();},
+                                        button {class:"label",aria_label:file_row_label(&files[idx]),title:"{path}",onclick:move |_|{active.set(Some(idx));focus_reader();},
                                             if g.custom {"{path}"}else{"{path.rsplit('/').next().unwrap_or(path)}"}
-                                            span {class:"badge","{kind(path)} · {state.read().status(&files[idx])}"}
+                                            span {class:"file-meta",
+                                                span {class:"badge","{kind(path)} · {state.read().status(&files[idx])}"}
+                                                {line_counts(&files[idx])}
+                                            }
                                         }
                                         Order {pos:fi,len:g.files.len(),onmove:move |other|{let mut s=state();s.groups[gi].files.swap(fi,other);save.call(s)}}
                                     }
@@ -380,30 +410,64 @@ fn Reader(pr: String, head: String, files: Rc<Vec<File>>, initial: Review, dark:
                 }
                 }
             }
-            article {
-                div {class:"reader-dock",
-                nav {class:"file-nav",aria_label:"File navigation",onkeydown:keep_native_space,
-                    span { if let Some(p)=pos {"File {p+1} of {files.len()}"} else {"{files.len()} files"} }
-                    button {disabled:previous.is_none(),onclick:move |_|if let Some(p)=previous{jump.call(p)}, "Previous " kbd {"K"}}
-                    button {disabled:next.is_none(),onclick:move |_|if let Some(p)=next{jump.call(p)}, "Next " kbd {"J"}}
+            article {class:"reader",
+                div {class:"reader-top",
+                    nav {class:"file-nav",aria_label:"File navigation",onkeydown:keep_native_space,
+                        span { if let Some(p)=pos {"File {p+1} of {files.len()}"} else {"{files.len()} files"} }
+                        button {disabled:previous.is_none(),onclick:move |_|if let Some(p)=previous{jump.call(p)}, "Previous " kbd {"K"}}
+                        button {disabled:next.is_none(),onclick:move |_|if let Some(p)=next{jump.call(p)}, "Next " kbd {"J"}}
+                    }
+                    if let Some(f)=file {
+                        div {class:"file-heading",
+                            small {"UNIFIED DIFF · {f.change_type()}"} h2 {"{f.filename}"}
+                            div {class:"tools",onkeydown:keep_native_space,
+                                {line_counts(f)}
+                                a {href:"https://github.com/{pr}/files#diff-{hash(&f.filename)}",target:"_blank",rel:"noopener noreferrer","GitHub diff ↗"}
+                                button {title:"Toggle reviewed (Space)",onclick:move |_|toggle.call(()),
+                                    if state.read().status(f)=="Reviewed" {"Mark unread"}else{"Mark reviewed"}
+                                    " " kbd {"Space"}
+                                }
+                                b {"{state.read().status(f)}"}
+                            }
+                        }
+                    }
+                }
+                div {class:"diff-scroll",
+                    if let Some(f)=file {
+                        if let Some(patch)=f.patch(){
+                            diff::Diff {key:"{f.filename}",path:f.filename.clone(),patch:patch.clone(),dark,oncomment:move |a|anchor.set(Some(a)),anchor:anchor()}
+                        } else {p {"GitHub supplied no text patch for this file. Open the GitHub diff for details."}}
+                    }else{div {class:"empty",span {class:"diff-icon",aria_hidden:"true","±"} small {"DIFF VIEWER"} h2 {"Choose a file to begin"} p {"Expand a group and select a file to read its changes."}}}
                 }
                 {draft_tray(pr.clone(),head,anchor,dark)}
-                }
-                if let Some(f)=active().and_then(|i|files.get(i)){
-                    small {"UNIFIED DIFF · {f.change_type()}"} h2 {"{f.filename}"}
-                    div {class:"tools",onkeydown:keep_native_space,
-                        a {href:"https://github.com/{pr}/files#diff-{hash(&f.filename)}",target:"_blank",rel:"noopener noreferrer","GitHub diff ↗"}
-                        button {title:"Toggle reviewed (Space)",onclick:move |_|toggle.call(()),
-                            if state.read().status(f)=="Reviewed" {"Mark unread"}else{"Mark reviewed"}
-                            " " kbd {"Space"}
-                        }
-                        b {"{state.read().status(f)}"}
-                    }
-                    if let Some(patch)=f.patch(){
-                        diff::Diff {key:"{f.filename}",path:f.filename.clone(),patch:patch.clone(),dark,oncomment:move |a|anchor.set(Some(a)),editing:anchor.read().is_some()}
-                    } else {p {"GitHub supplied no text patch for this file. Open the GitHub diff for details."}}
-                }else{div {class:"empty",span {class:"diff-icon",aria_hidden:"true","±"} small {"DIFF VIEWER"} h2 {"Choose a file to begin"} p {"Expand a group and select a file to read its changes."}}}
             }
+        }
+    }
+}
+fn describe_line_counts(added: u32, removed: u32) -> String {
+    format!("Lines added: {added}; lines removed: {removed}")
+}
+fn file_row_label(file: &File) -> String {
+    match file.line_changes() {
+        Some((added, removed)) => {
+            format!(
+                "{} · {}",
+                file.filename,
+                describe_line_counts(added, removed)
+            )
+        }
+        None => file.filename.clone(),
+    }
+}
+fn line_counts(file: &File) -> Element {
+    let Some((added, removed)) = file.line_changes() else {
+        return rsx! {};
+    };
+    let description = describe_line_counts(added, removed);
+    rsx! {
+        span {class:"line-counts",role:"img",aria_label:"{description}",title:"{description}",
+            span {class:"lines-added","+{added}"}
+            span {class:"lines-removed","−{removed}"}
         }
     }
 }

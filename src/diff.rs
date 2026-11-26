@@ -184,7 +184,7 @@ pub fn Diff(
     patch: Rc<str>,
     dark: bool,
     oncomment: EventHandler<crate::comments::Anchor>,
-    editing: bool,
+    anchor: Option<crate::comments::Anchor>,
 ) -> Element {
     let mut limit = use_signal(|| BATCH);
     let cache = use_context::<Rc<RefCell<HighlightCache>>>();
@@ -195,10 +195,13 @@ pub fn Diff(
         let line = &patch[offset..offset + row.len];
         offset += row.len;
         let mut tokens = line.get(1..).unwrap_or("");
-        rows.push(rsx! { div { class:row.class,
+        let target = anchor
+            .as_ref()
+            .is_some_and(|a| a.path == path && row.coord == Some((a.side.as_str(), a.line)));
+        rows.push(rsx! { div { class:"{row.class}",class:if target {"comment-target"},
             if cfg!(not(target_arch="wasm32")) {
                 if let Some((side,n))=row.coord{
-                    button {class:"line-comment",disabled:editing,title:"Draft a comment on {side} line {n}",onkeydown:crate::keep_native_space,
+                    button {class:"line-comment",disabled:anchor.is_some(),title:format!("Draft a comment · {}",crate::comments::line_label(side,n)),onkeydown:crate::keep_native_space,
                         onclick:{let path=path.clone();move |_|oncomment.call(crate::comments::Anchor{path:path.clone(),side:side.into(),line:n})},"{n} +"}
                 }
             }

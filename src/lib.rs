@@ -104,6 +104,8 @@ pub struct File {
     status: String,
     patch: Option<std::rc::Rc<str>>,
     previous_filename: Option<String>,
+    additions: Option<u32>,
+    deletions: Option<u32>,
     #[serde(skip)]
     fingerprint: std::cell::OnceCell<String>,
 }
@@ -116,6 +118,10 @@ impl File {
     }
     pub fn patch(&self) -> Option<&std::rc::Rc<str>> {
         self.patch.as_ref()
+    }
+    /// Use GitHub's totals even when it omits or truncates the text patch.
+    pub fn line_changes(&self) -> Option<(u32, u32)> {
+        self.additions.zip(self.deletions)
     }
     pub fn fingerprint(&self) -> &str {
         self.fingerprint.get_or_init(|| {

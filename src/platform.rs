@@ -207,7 +207,7 @@ pub fn load_theme() -> String {
     store::read("appearance")
         .ok()
         .flatten()
-        .filter(|s| matches!(s.as_str(), "light" | "dark" | "dusk"))
+        .filter(|s| matches!(s.as_str(), "light" | "dark" | "dusk" | "solarized"))
         .unwrap_or_else(|| "light".into())
 }
 pub fn save_theme(theme: &str) -> Result<(), String> {

@@ -54,7 +54,9 @@ Generation can send PR context to the chosen agent’s provider and consume its 
 - **Keep your place:** **J / K** move forward and back; **Space** marks the current file reviewed or unread. **Recent PRs** reopens work on this device. After a push, only reviewed files whose diff changed need another look.
 - **Send feedback:** click the numbered `+` beside a line to draft a comment in the pane below the diff. From that pane, choose **Approve**, **Request changes**, or **Post comments** when you’re ready. All saved inline comments are included; review the summary and confirm to publish on GitHub. Marking a file reviewed does *not* submit a review. GitHub doesn’t allow approving or requesting changes on your own PR.
 
-The **Ferriscope ▾** menu holds appearance settings and the desktop release checker. **Check for updates** links to newer releases; it doesn’t replace the running app.
+The **Ferriscope ▾** menu holds appearance settings and the desktop release checker.
+Choose **Light**, **Dark**, **Dusk**, or **Solarized Light** under **Color theme**; Ferriscope remembers your choice on this device.
+**Check for updates** links to newer releases; it doesn’t replace the running app.
 
 ## Other ways to run Ferriscope
 

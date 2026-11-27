@@ -427,18 +427,27 @@ fn Reader(
             }
         }
     });
-    let ordered: Vec<_> = groups
-        .iter()
-        .enumerate()
-        .flat_map(|(g, group)| {
-            let index = &index;
-            group
-                .files
-                .iter()
-                .enumerate()
-                .filter_map(move |(fi, p)| index.get(p).map(|&i| (g, fi, i)))
-        })
-        .collect();
+    // Navigation changes the cursor, not the review order. Build both lookup
+    // directions together so switching files doesn't walk the whole PR.
+    let navigation = use_memo({
+        let index = Rc::clone(&index);
+        let count = files.len();
+        move || {
+            let mut ordered = Vec::with_capacity(count);
+            let mut positions = vec![None; count];
+            for (g, group) in state.read().groups.iter().enumerate() {
+                for (fi, path) in group.files.iter().enumerate() {
+                    if let Some(&i) = index.get(path) {
+                        positions[i].get_or_insert(ordered.len());
+                        ordered.push((g, fi, i));
+                    }
+                }
+            }
+            (ordered, positions)
+        }
+    });
+    let nav = navigation.read();
+    let (ordered, positions) = &*nav;
     let needle = query.read().trim().to_lowercase();
     let matches: Vec<_> = if needle.is_empty() {
         Vec::new()
@@ -450,7 +459,7 @@ fn Reader(
             .collect()
     };
     let first = matches.first().map(|&(p, _)| p);
-    let pos = ordered.iter().position(|&(_, _, i)| Some(i) == active());
+    let pos = active().and_then(|i| positions[i]);
     let previous = pos.and_then(|p| p.checked_sub(1));
     let next = Some(pos.map_or(0, |p| p + 1)).filter(|&p| p < ordered.len());
     let jump = use_callback(move |(g, fi, i): (usize, usize, usize)| {
@@ -470,10 +479,7 @@ fn Reader(
         active.set(Some(i));
         focus_reader();
     });
-    let at_position = {
-        let ordered = ordered.clone();
-        use_callback(move |p: usize| jump.call(ordered[p]))
-    };
+    let at_position = use_callback(move |p: usize| jump.call(navigation.peek().0[p]));
     let (guided_panel, explanation, counter, previous, next, navigate) = {
         #[cfg(feature = "desktop")]
         {

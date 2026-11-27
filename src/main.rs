@@ -139,7 +139,7 @@ fn App() -> Element {
             .peek()
             .as_ref()
             .map(|(snapshot, _)| snapshot.clone());
-        let dark = theme.peek().as_str() != "light";
+        let dark = matches!(theme.peek().as_str(), "dark" | "dusk");
         fetch_task.set(Some(spawn(async move {
             let result = platform::fetch(&key, cached, async |files| {
                 diff::prepare_first(files, dark).await
@@ -225,7 +225,7 @@ fn App() -> Element {
             // Keep the reader mounted while visiting the inbox so navigation
             // and in-progress review input aren't reset by the trip home.
             div {key:"{revision}",hidden:!show_reader() || pending.read().is_some(),
-                Reader {route:route(),pr:snapshot.key.clone(),head:snapshot.head().to_owned(), files:snapshot.files.clone(),initial:review.clone(),dark:theme.read().as_str()!="light"}
+                Reader {route:route(),pr:snapshot.key.clone(),head:snapshot.head().to_owned(), files:snapshot.files.clone(),initial:review.clone(),dark:matches!(theme.read().as_str(),"dark"|"dusk")}
             }
         }
         if let Some(key)=pending(){
@@ -311,7 +311,7 @@ fn Appearance(mut theme: Signal<String>, mut error: Signal<String>) -> Element {
                 div {class:"settings-panel",
                     div {role:"group",aria_labelledby:"theme-title",
                     strong {id:"theme-title","Color theme"}
-                    for (id,label) in [("light","Light"),("dark","Dark"),("dusk","Dusk")] {
+                    for (id,label) in [("light","Light"),("dark","Dark"),("dusk","Dusk"),("solarized","Solarized Light")] {
                         label {
                             input {r#type:"radio",name:"theme",checked:theme.read().as_str()==id,onchange:move |_|{
                                 if let Err(msg)=platform::save_theme(id){error.set(msg)}
